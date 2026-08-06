@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Call extends EntityBase {
     String name;
     Integer duration;

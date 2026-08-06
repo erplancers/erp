@@ -18,7 +18,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class CaseEvent extends EntityBase {
     String caseEventName;
     String caseEventDescription;

@@ -17,7 +17,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Supplier extends EntityBase {
     
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)

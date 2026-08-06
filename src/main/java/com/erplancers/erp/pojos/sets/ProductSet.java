@@ -14,7 +14,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class ProductSet extends EntitySet<Product>
 {
 }

@@ -15,7 +15,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Product extends EntityBase {
     
     String productName;

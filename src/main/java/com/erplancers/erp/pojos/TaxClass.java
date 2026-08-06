@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class TaxClass extends EntityBase {
     
     String title;

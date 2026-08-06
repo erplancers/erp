@@ -5,6 +5,9 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
+import java.util.Set;
+
 @Getter
 @Setter
 @Entity
@@ -24,7 +27,7 @@ public class CostCenter extends EntityBase {
     private CostCenter parent;
 
     @OneToMany(mappedBy="parent")
-    private Set<CostCenter> children=new HashSet<>();
+    private Set<CostCenter> children;
 
     private LocalDate validFrom;
 

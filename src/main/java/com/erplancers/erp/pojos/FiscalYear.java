@@ -17,7 +17,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class FiscalYear extends EntityBase {
 
 

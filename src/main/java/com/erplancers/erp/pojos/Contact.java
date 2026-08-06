@@ -17,7 +17,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Contact extends EntityBase {
     String salutation;
     String name;

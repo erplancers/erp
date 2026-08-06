@@ -15,6 +15,6 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class CampaignLogSet extends EntitySet<CampaignLog> {
 }

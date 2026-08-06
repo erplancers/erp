@@ -13,7 +13,7 @@ import lombok.ToString;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Account extends EntityBase {
     String code;
     String name;

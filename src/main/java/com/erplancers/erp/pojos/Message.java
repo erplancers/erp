@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Message extends EntityBase {
     
     String message;

@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class ErpData extends EntityBase {
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)
     ActionSet actions;

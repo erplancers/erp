@@ -17,7 +17,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class City extends EntityBase {
     String cityName;
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)

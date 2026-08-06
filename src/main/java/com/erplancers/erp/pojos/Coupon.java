@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Coupon extends EntityBase {
     String couponCode;
     String couponName;

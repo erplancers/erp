@@ -15,6 +15,6 @@ import lombok.ToString;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class CostCenterSet extends EntitySet<CostCenter> {
 }

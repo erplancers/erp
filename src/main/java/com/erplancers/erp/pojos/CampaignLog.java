@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class CampaignLog extends EntityBase {
     String trackerKey;
     String trackerName;

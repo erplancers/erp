@@ -18,7 +18,7 @@ import java.time.LocalTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class BusinessHour extends EntityBase {
     String businessHourName;
     LocalTime startTime;

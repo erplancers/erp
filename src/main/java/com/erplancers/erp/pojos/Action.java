@@ -18,7 +18,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Action extends EntityBase {
     String actionName;
     String actionDescription;

@@ -14,6 +14,6 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class OutboundMailSet extends EntitySet<OutboundMail> {
 }

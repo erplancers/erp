@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Content extends EntityBase {
     String contentName;
     String contentValue;

@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Condition extends EntityBase {
     String conditionName;
     String conditionValue;

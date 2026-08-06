@@ -18,7 +18,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class SurveyResponse extends EntityBase {
     
     float happiness;

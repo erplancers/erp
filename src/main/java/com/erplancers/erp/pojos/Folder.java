@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Folder extends EntityBase {
     
     //include all entities and folders recursive !!

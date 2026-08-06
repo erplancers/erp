@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Favorite extends EntityBase {
     String favoriteName;
     String favoriteDescription;

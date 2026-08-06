@@ -13,6 +13,6 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class EmailMarketingSet extends EntityBase {
 }

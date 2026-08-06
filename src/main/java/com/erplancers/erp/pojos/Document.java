@@ -17,7 +17,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Document extends EntityBase {
     String documentName;
     String documentDescription;

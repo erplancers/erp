@@ -13,7 +13,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Metadata extends EntityBase {
     String metaKey;
     String metaValue;

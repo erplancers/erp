@@ -14,6 +14,6 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class MetadataSet extends EntitySet<Metadata> {
 }

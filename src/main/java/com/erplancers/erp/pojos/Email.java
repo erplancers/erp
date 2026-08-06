@@ -18,7 +18,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Email extends EntityBase {
     
     String emailName;

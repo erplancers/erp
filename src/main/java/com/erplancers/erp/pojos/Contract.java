@@ -21,7 +21,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Contract extends EntityBase {
     String contractName;
     String referenceValue;

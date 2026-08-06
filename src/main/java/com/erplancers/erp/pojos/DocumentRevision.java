@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class DocumentRevision extends EntityBase {
     String changeLog;
     String documentType;

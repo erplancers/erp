@@ -15,6 +15,6 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class InvoiceSet extends EntitySet<Invoice> {
 }

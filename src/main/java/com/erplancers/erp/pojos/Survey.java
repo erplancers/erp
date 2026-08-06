@@ -11,12 +11,17 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.*;
 
+import java.util.Set;
+
 @Entity
 @NoArgsConstructor
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Survey extends EntityBase {
-    
+    @OneToMany
+    Set<SurveyQuestion>  surveyQuestions;
+    @OneToMany
+    Set<SurveyResponse> surveyResponses;
 }

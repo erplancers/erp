@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Customer extends EntityBase {
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)
     Contact contact;

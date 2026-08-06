@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Note extends EntityBase {
     String topic;
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)

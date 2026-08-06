@@ -16,7 +16,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Address extends EntityBase {
     String firstName;
     String lastName;

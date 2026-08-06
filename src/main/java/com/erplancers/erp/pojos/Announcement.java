@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class Announcement extends EntityBase {
     Boolean read;
     Boolean isActive;

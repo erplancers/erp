@@ -18,7 +18,7 @@ import lombok.*;
 @Getter
 @Setter
 @Table
-@ToString
+
 public class EmailMarketing extends EntityBase {
     
     @ManyToOne(cascade = CascadeType.ALL,fetch = FetchType.EAGER)
