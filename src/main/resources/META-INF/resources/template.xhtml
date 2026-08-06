@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html lang="en-us"
+
+      xmlns:h="jakarta.faces.html"
+      xmlns:p="http://primefaces.org/ui"
+      xmlns:pe="http://primefaces.org/ui/extensions"
+      xmlns:ui="jakarta.faces.facelets">
+
+<h:head>
+    <title>.:: JoinFaces Example ::.</title>
+    <meta content='text/html; charset=UTF-8' http-equiv="Content-Type" />
+    <link href="#{resource['images/favicon.ico']}" rel="shortcut icon"/>
+
+</h:head>
+
+<h:body>
+    <pe:layout fullPage="true" >
+        <pe:layoutPane id="mainLayoutPane" position="center">
+            <h:form id="contentForm" prependId="false" enctype="multipart/form-data">
+                <p:ajaxStatus onstart="PF('statusDialog').show();"
+                              onsuccess="PF('statusDialog').hide();" />
+                <p:dialog widgetVar="statusDialog" position="right top"
+                          draggable="false" resizable="false" closable="false"
+                          showHeader="false" modal="false">
+                    <p:graphicImage value="#{resource['images/ajaxloading.gif']}" />
+                </p:dialog>
+                <div id="mainDiv" class="ui-fluid center">
+                    <p:menubar>
+                        <p:menuitem id="starterMenuItem" value="Starter" url="/starter.faces" />
+                        <p:menuitem id="fileUploadMenuItem" value="File Upload" url="fileUpload.faces" />
+                        <p:menuitem id="customInputMenuItem" value="Custom Input" url="customInput.faces" />
+                        <p:menuitem id="myTagMenuItem" value="My Tag" url="helloTag.faces" />
+                        <p:menuitem id="hiCCMenuItem" value="Hi CC" url="hiCC.faces" />
+                        <p:menuitem id="welcomeConverterMenuItem" value="Welcome Converter" url="welcomeConverter.faces" />
+                    </p:menubar>
+
+                    <p:spacer height="10" />
+
+                    <ui:insert name="content" />
+                </div>
+            </h:form>
+        </pe:layoutPane>
+    </pe:layout>
+</h:body>
+</html>
