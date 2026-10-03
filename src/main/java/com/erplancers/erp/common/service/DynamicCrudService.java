@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.beans.Introspector;
-import java.lang.reflect.Modifier;
 import java.time.temporal.Temporal;
 import java.util.Date;
 import java.util.LinkedHashMap;
@@ -36,9 +35,11 @@ public class DynamicCrudService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> get(String slug, Long id) {
-        EntityBase entity = (EntityBase) registry.get(slug).repository().findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Resource not found: " + id));
-        return row(entity);
+        var optional = registry.get(slug).repository().findById(id);
+        if (optional.isEmpty()) {
+            throw new IllegalArgumentException("Resource not found: " + id);
+        }
+        return row(optional.get());
     }
 
     @Transactional
@@ -52,8 +53,11 @@ public class DynamicCrudService {
                 throw new IllegalStateException("Entity needs a no-args constructor: " + descriptor.entityType().getName(), e);
             }
         } else {
-            entity = (EntityBase) descriptor.repository().findById(id)
-                    .orElseThrow(() -> new IllegalArgumentException("Resource not found: " + id));
+            var optional = descriptor.repository().findById(id);
+            if (optional.isEmpty()) {
+                throw new IllegalArgumentException("Resource not found: " + id);
+            }
+            entity = (EntityBase) optional.get();
         }
 
         BeanWrapper wrapper = new BeanWrapperImpl(entity);
@@ -94,8 +98,10 @@ public class DynamicCrudService {
             if ("class".equals(property.getName()) || property.getReadMethod() == null) continue;
             Class<?> type = property.getPropertyType();
             if (type != null && isSimple(type)) {
-                try { row.put(property.getName(), wrapper.getPropertyValue(property.getName())); }
-                catch (RuntimeException ignored) { }
+                try {
+                    row.put(property.getName(), wrapper.getPropertyValue(property.getName()));
+                } catch (RuntimeException ignored) {
+                }
             }
         }
         return row;
