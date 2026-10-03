@@ -5,6 +5,7 @@ import com.erplancers.erp.common.repository.ErpRepository;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.LinkedHashMap;
@@ -12,9 +13,15 @@ import java.util.Map;
 
 @Component
 public class CrudRegistry {
+    private final ApplicationContext context;
     private final Map<String, CrudDescriptor> descriptors = new LinkedHashMap<>();
 
     public CrudRegistry(ApplicationContext context) {
+        this.context = context;
+    }
+
+    @PostConstruct
+    void initialize() {
         context.getBeansOfType(ErpRepository.class).forEach((beanName, repository) -> register(repository));
     }
 
