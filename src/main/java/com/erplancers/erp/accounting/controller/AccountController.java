@@ -4,33 +4,35 @@ import com.erplancers.erp.accounting.domain.Account;
 import com.erplancers.erp.accounting.report.AccountReportService;
 import com.erplancers.erp.accounting.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.Optional;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/api/accounts")
 public class AccountController {
-    final AccountRepository accountRepository;
-    final AccountReportService accountReportService;
-    @GetMapping("/api/accounts/{id}")
-    public ResponseEntity<Account> findbyid(@PathVariable Long id){
-        Optional<Account> account=accountRepository.findById(id);
-        if (account.isPresent())  ResponseEntity.ok(account.get());
-        return ResponseEntity.notFound().build();
+    private final AccountRepository accountRepository;
+    private final AccountReportService accountReportService;
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Account> findById(@PathVariable Long id) {
+        return accountRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
-    @GetMapping("/api/accounts{page}{size}")
-    public ResponseEntity<List<Account>> getall(@RequestParam int page,@RequestParam int size){
-        List<Account> accounts=accountRepository.findAll(PageRequest.of(page,size)).toList();
-        if (accounts.isEmpty()) return ResponseEntity.noContent().build();
+
+    @GetMapping
+    public ResponseEntity<Page<Account>> getAll(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        Page<Account> accounts = accountRepository.findAll(PageRequest.of(page, Math.min(Math.max(size, 1), 100)));
         return ResponseEntity.ok(accounts);
     }
-    public ResponseEntity
+
+    @GetMapping("/{id}/balance")
+    public ResponseEntity<?> balance(@PathVariable Long id) {
+        return ResponseEntity.ok(accountReportService.balance(id));
+    }
 }
