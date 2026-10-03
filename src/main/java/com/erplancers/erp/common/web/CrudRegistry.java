@@ -2,7 +2,6 @@ package com.erplancers.erp.common.web;
 
 import com.erplancers.erp.common.domain.EntityBase;
 import com.erplancers.erp.common.repository.ErpRepository;
-import org.springframework.aop.support.AopUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +19,7 @@ public class CrudRegistry {
     }
 
     private void register(ErpRepository repository) {
-        Class<?> entityType = resolveEntityType(AopUtils.getTargetClass(repository));
+        Class<?> entityType = resolveEntityType(repository.getClass());
         if (entityType == null || !EntityBase.class.isAssignableFrom(entityType)) return;
 
         String slug = toSlug(entityType.getSimpleName());
