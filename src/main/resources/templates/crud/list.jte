@@ -19,7 +19,7 @@
         </div>
         <a class="btn btn-primary" href="/app/@resource.slug()/new">New</a>
     </div>
-    @if(page.empty)
+    @if(page.isEmpty())
         <div class="alert alert-secondary">No records.</div>
     @else
         <div class="table-responsive">
