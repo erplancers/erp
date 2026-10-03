@@ -23,7 +23,7 @@ public class AccountController {
     @GetMapping("/api/accounts/{id}")
     public ResponseEntity<Account> findbyid(@PathVariable Long id){
         Optional<Account> account=accountRepository.findById(id);
-        if (account.isPresent())  ResponseEntity.ok(account.get());
+        if (account.isPresent()) return ResponseEntity.ok(account.get());
         return ResponseEntity.notFound().build();
     }
     @GetMapping("/api/accounts{page}{size}")
@@ -32,5 +32,4 @@ public class AccountController {
         if (accounts.isEmpty()) return ResponseEntity.noContent().build();
         return ResponseEntity.ok(accounts);
     }
-    public ResponseEntity
 }
