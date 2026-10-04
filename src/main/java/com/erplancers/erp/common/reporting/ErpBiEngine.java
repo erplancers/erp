@@ -154,17 +154,20 @@ public class ErpBiEngine {
             List<String> measures,
             Map<String, String> filters,
             String orderBy,
-            int limit,
-            boolean includeRank,
-            boolean includeShareOfTotal,
-            boolean includeGrandTotal) {
+            Integer limit,
+            Boolean includeRank,
+            Boolean includeShareOfTotal,
+            Boolean includeGrandTotal) {
 
         public BiQuery {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
             measures = measures == null ? List.of("count") : List.copyOf(measures);
             filters = filters == null ? Map.of() : Map.copyOf(filters);
             orderBy = orderBy == null ? "" : orderBy;
-            limit = limit <= 0 ? 100 : limit;
+            limit = limit == null || limit <= 0 ? 100 : limit;
+            includeRank = Boolean.TRUE.equals(includeRank);
+            includeShareOfTotal = Boolean.TRUE.equals(includeShareOfTotal);
+            includeGrandTotal = Boolean.TRUE.equals(includeGrandTotal);
         }
     }
 
@@ -181,12 +184,14 @@ public class ErpBiEngine {
 
     public record BiAnalysisRequest(
             List<String> fields,
-            int sampleSize,
-            double zScoreThreshold,
+            Integer sampleSize,
+            Double zScoreThreshold,
             AggregateReportingService.AggregateRequest aggregate) {
 
         public BiAnalysisRequest {
             fields = fields == null ? List.of() : List.copyOf(fields);
+            sampleSize = sampleSize == null || sampleSize <= 0 ? 100 : sampleSize;
+            zScoreThreshold = zScoreThreshold == null || zScoreThreshold <= 0 ? 3.0 : zScoreThreshold;
         }
     }
 }
