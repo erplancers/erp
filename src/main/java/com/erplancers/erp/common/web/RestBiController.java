@@ -3,6 +3,7 @@ package com.erplancers.erp.common.web;
 import com.erplancers.erp.common.reporting.AdvancedAnalyticsEngine;
 import com.erplancers.erp.common.reporting.ErpBiEngine;
 import com.erplancers.erp.common.reporting.OlapAnalysisEngine;
+import com.erplancers.erp.common.reporting.JpaOlapCubeService;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ public class RestBiController {
 
     private final ErpBiEngine bi;
     private final OlapAnalysisEngine olap;
+    private final JpaOlapCubeService jpaOlap;
     private final PolicyAuthorizationService authorization;
 
     @PostMapping("/resources/{slug}/query")
@@ -36,6 +38,29 @@ public class RestBiController {
             @RequestBody ErpBiEngine.BiAnalysisRequest request) {
         requireRead(authentication, slug);
         return bi.analyze(slug, request);
+    }
+
+    @GetMapping("/olap/cubes")
+    public JpaOlapCubeService.AutoCubeCatalog autoCubes(Authentication authentication) {
+        requireAuthenticated(authentication);
+        return jpaOlap.cubes();
+    }
+
+    @GetMapping("/olap/cubes/{cube}")
+    public JpaOlapCubeService.AutoCube autoCube(
+            Authentication authentication,
+            @PathVariable String cube) {
+        requireRead(authentication, cube);
+        return jpaOlap.cube(cube);
+    }
+
+    @PostMapping("/olap/cubes/{cube}/query")
+    public OlapAnalysisEngine.CubeResult queryAutoCube(
+            Authentication authentication,
+            @PathVariable String cube,
+            @RequestBody JpaOlapCubeService.AutoCubeQueryRequest request) {
+        requireRead(authentication, cube);
+        return jpaOlap.query(cube, request);
     }
 
     @GetMapping("/olap/catalog")
