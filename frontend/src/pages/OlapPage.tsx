@@ -90,12 +90,24 @@ function SelectionSummary({
           onClick={onClear}
         />
       </div>
-      <div className="olap-selection-list">
-        {values.map((value) => (
+      <div
+        className="olap-selection-list"
+        style={{
+          maxHeight: "180px",
+          overflowY: "auto",
+          overflowX: "hidden"
+        }}
+      >
+        {values.slice(0, 20).map((value) => (
           <span key={value} className="olap-selection-item">
             {value}
           </span>
         ))}
+        {values.length > 20 && (
+          <span className="olap-selection-item text-500">
+            + {values.length - 20} more selected
+          </span>
+        )}
       </div>
     </div>
   );
@@ -129,6 +141,7 @@ function FieldSelector({
         filter
         showSelectAll
         virtualScrollerOptions={{ itemSize: 40 }}
+        scrollHeight="320px"
         panelClassName="olap-field-selector-panel"
         className="field-control"
       />
@@ -390,7 +403,19 @@ export function OlapPage() {
   }
 
   return (
-    <div className="olap-page">
+    <div
+      className="olap-page"
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        maxHeight: "calc(100vh - 24px)",
+        overflowY: "auto",
+        overflowX: "hidden",
+        boxSizing: "border-box",
+        paddingBottom: "2rem"
+      }}
+    >
       <div className="section-heading olap-header">
         <div>
           <div className="eyebrow">OLAP / CUBES</div>
@@ -546,7 +571,14 @@ export function OlapPage() {
                       onClick={() => setFilters({})}
                     />
                   </div>
-                  <div className="olap-scroll-selection">
+                  <div
+              className="olap-scroll-selection"
+              style={{
+                maxHeight: "220px",
+                overflowY: "auto",
+                overflowX: "hidden"
+              }}
+            >
                     {Object.entries(filters).map(([key, value]) => (
                       <div key={key} className="olap-filter-item">
                         <span>
@@ -823,7 +855,14 @@ export function OlapPage() {
 
             {relationQueries.data && relationQueries.data.length > 0 && (
               <Card title="Discovered relationship paths">
-                <div className="olap-scroll-selection">
+                <div
+                  className="olap-scroll-selection"
+                  style={{
+                    maxHeight: "240px",
+                    overflowY: "auto",
+                    overflowX: "hidden"
+                  }}
+                >
                   {relationQueries.data.map((discovery) => (
                     <div key={discovery.relation} className="olap-relation-item">
                       <b>{discovery.relation}</b>
