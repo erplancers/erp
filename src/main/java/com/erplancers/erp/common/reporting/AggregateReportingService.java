@@ -5,13 +5,15 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.From;
+import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.ManagedType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.beans.Introspector;
-import java.beans.PropertyDescriptor;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -25,9 +27,22 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Generic database-backed ERP BI aggregation engine.
+ *
+ * <p>Paths may traverse JPA relationships, for example:
+ * {@code customer.name}, {@code product.productName} or
+ * {@code invoice.invoiceStatus}. Associations are joined automatically,
+ * including collection-valued associations.</p>
+ *
+ * <p>This keeps BI generic: dashboards do not need a report class for every
+ * customer/product/sales combination.</p>
+ */
 @Service
 @Transactional(readOnly = true)
 public class AggregateReportingService {
+
+    private static final int MAX_LIMIT = 1000;
 
     private final EntityManager entityManager;
     private final CrudRegistry registry;
@@ -39,17 +54,17 @@ public class AggregateReportingService {
 
     public AggregateReport aggregate(String slug, AggregateRequest request) {
         CrudRegistry.CrudDescriptor descriptor = descriptor(slug);
-        validate(request, descriptor.entityType());
 
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
         Root<?> root = query.from(descriptor.entityType());
 
+        Map<String, From<?, ?>> joins = new LinkedHashMap<>();
         List<Expression<?>> selections = new ArrayList<>();
         List<Expression<?>> groups = new ArrayList<>();
 
         for (String field : request.groupBy()) {
-            Expression<?> expression = root.get(field);
+            Expression<?> expression = resolvePath(root, field, joins);
             selections.add(expression);
             groups.add(expression);
         }
@@ -58,30 +73,27 @@ public class AggregateReportingService {
                 ? List.of("count")
                 : request.metrics();
 
+        Map<String, Expression<?>> metricExpressions = new LinkedHashMap<>();
         for (String metric : metrics) {
-            selections.add(metricExpression(cb, root, metric));
+            Expression<?> expression = metricExpression(cb, root, metric, joins);
+            selections.add(expression);
+            metricExpressions.put(metric, expression);
         }
 
         query.multiselect(selections.toArray(Expression[]::new));
-        Predicate predicate = predicates(cb, root, request.filters());
+
+        Predicate predicate = predicates(cb, root, request.filters(), joins);
         if (predicate != null) {
             query.where(predicate);
         }
+
         if (!groups.isEmpty()) {
             query.groupBy(groups);
         }
 
-        if (!request.orderBy().isBlank() && request.orderBy().contains(":")) {
-            String[] order = request.orderBy().split(":", 2);
-            Expression<?> orderExpression = order[0].equalsIgnoreCase("count")
-                    ? metricExpression(cb, root, "count")
-                    : root.get(order[0]);
-            query.orderBy("desc".equalsIgnoreCase(order[1])
-                    ? cb.desc(orderExpression)
-                    : cb.asc(orderExpression));
-        }
+        applyOrder(query, cb, root, request.orderBy(), metricExpressions, joins);
 
-        int limit = Math.max(1, Math.min(request.limit(), 1000));
+        int limit = Math.max(1, Math.min(request.limit(), MAX_LIMIT));
         List<Object[]> rows = entityManager.createQuery(query)
                 .setMaxResults(limit)
                 .getResultList();
@@ -90,21 +102,70 @@ public class AggregateReportingService {
         for (Object[] row : rows) {
             Map<String, Object> values = new LinkedHashMap<>();
             int index = 0;
+
             for (String field : request.groupBy()) {
                 values.put(field, row[index++]);
             }
             for (String metric : metrics) {
                 values.put(metric, row[index++]);
             }
+
             data.add(values);
         }
 
-        return new AggregateReport(slug, descriptor.module(), request.groupBy(), metrics,
-                request.filters(), data);
+        return new AggregateReport(
+                slug,
+                descriptor.module(),
+                request.groupBy(),
+                metrics,
+                request.filters(),
+                data);
     }
 
-    private Expression<?> metricExpression(CriteriaBuilder cb, Root<?> root, String metric) {
+    private void applyOrder(
+            CriteriaQuery<Object[]> query,
+            CriteriaBuilder cb,
+            Root<?> root,
+            String orderBy,
+            Map<String, Expression<?>> metricExpressions,
+            Map<String, From<?, ?>> joins) {
+
+        if (orderBy == null || orderBy.isBlank()) {
+            return;
+        }
+
+        String target = orderBy;
+        boolean descending = false;
+
+        int lastColon = orderBy.lastIndexOf(':');
+        if (lastColon > 0) {
+            String direction = orderBy.substring(lastColon + 1);
+            if ("asc".equalsIgnoreCase(direction) || "desc".equalsIgnoreCase(direction)) {
+                target = orderBy.substring(0, lastColon);
+                descending = "desc".equalsIgnoreCase(direction);
+            }
+        }
+
+        Expression<?> expression = metricExpressions.get(target);
+        if (expression == null) {
+            if ("count".equalsIgnoreCase(target)) {
+                expression = metricExpression(cb, root, "count", joins);
+            } else {
+                expression = resolvePath(root, target, joins);
+            }
+        }
+
+        query.orderBy(descending ? cb.desc(expression) : cb.asc(expression));
+    }
+
+    private Expression<?> metricExpression(
+            CriteriaBuilder cb,
+            Root<?> root,
+            String metric,
+            Map<String, From<?, ?>> joins) {
+
         String normalized = metric.trim().toLowerCase();
+
         if ("count".equals(normalized) || "count(*)".equals(normalized)) {
             return cb.count(root);
         }
@@ -112,35 +173,60 @@ public class AggregateReportingService {
         int colon = normalized.indexOf(':');
         if (colon <= 0 || colon == normalized.length() - 1) {
             throw new IllegalArgumentException(
-                    "Metric must be count or function:field (sum, avg, min, max)");
+                    "Metric must be count or function:field " +
+                    "(sum, avg, min, max, countDistinct)");
         }
 
         String function = normalized.substring(0, colon);
         String field = metric.substring(colon + 1);
-        PropertyDescriptor property = property(root.getJavaType(), field);
-        Class<?> type = property.getPropertyType();
+        Expression<?> expression = resolvePath(root, field, joins);
 
-        if (!isNumber(type)) {
-            throw new IllegalArgumentException("Metric " + metric + " requires a numeric field");
+        if (!isNumber(expression.getJavaType())
+                && !"countdistinct".equals(function)
+                && !"count_distinct".equals(function)) {
+            throw new IllegalArgumentException(
+                    "Metric " + metric + " requires a numeric field");
         }
 
-        Expression<? extends Number> expression = root.get(field);
         return switch (function) {
-            case "sum" -> cb.sum(expression);
-            case "avg" -> cb.avg(expression);
-            case "min" -> cb.min(expression);
-            case "max" -> cb.max(expression);
-            default -> throw new IllegalArgumentException("Unsupported metric: " + function);
+            case "sum" -> sum(cb, expression);
+            case "avg" -> cb.avg(asNumber(expression));
+            case "min" -> cb.min(asNumber(expression));
+            case "max" -> cb.max(asNumber(expression));
+            case "countdistinct", "count_distinct" -> cb.countDistinct(expression);
+            default -> throw new IllegalArgumentException(
+                    "Unsupported metric: " + function);
         };
     }
 
-    private Predicate predicates(CriteriaBuilder cb, Root<?> root, Map<String, String> filters) {
-        if (filters == null || filters.isEmpty()) return null;
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Expression<? extends Number> asNumber(Expression<?> expression) {
+        return (Expression) expression;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Expression<? extends Number> sum(
+            CriteriaBuilder cb,
+            Expression<?> expression) {
+        return cb.sum((Expression) expression);
+    }
+
+    private Predicate predicates(
+            CriteriaBuilder cb,
+            Root<?> root,
+            Map<String, String> filters,
+            Map<String, From<?, ?>> joins) {
+
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+
         List<Predicate> predicates = new ArrayList<>();
 
         for (Map.Entry<String, String> entry : filters.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
+
             String operator = "eq";
             String field = key;
 
@@ -150,26 +236,98 @@ public class AggregateReportingService {
                 operator = key.substring(colon + 1).toLowerCase();
             }
 
-            PropertyDescriptor property = property(root.getJavaType(), field);
-            Class<?> type = property.getPropertyType();
-            Expression<?> expression = root.get(field);
+            Expression<?> expression = resolvePath(root, field, joins);
+            Class<?> type = expression.getJavaType();
             Object typed = convert(value, type);
 
             predicates.add(switch (operator) {
                 case "eq" -> cb.equal(expression, typed);
                 case "ne" -> cb.notEqual(expression, typed);
-                case "like" -> cb.like(cb.lower(expression.as(String.class)), value.toLowerCase());
-                case "gt" -> cb.greaterThan(asComparable(expression), (Comparable) typed);
-                case "gte" -> cb.greaterThanOrEqualTo(asComparable(expression), (Comparable) typed);
-                case "lt" -> cb.lessThan(asComparable(expression), (Comparable) typed);
-                case "lte" -> cb.lessThanOrEqualTo(asComparable(expression), (Comparable) typed);
+                case "like" -> cb.like(
+                        cb.lower(expression.as(String.class)),
+                        value.toLowerCase());
+                case "gt" -> cb.greaterThan(
+                        asComparable(expression), (Comparable) typed);
+                case "gte" -> cb.greaterThanOrEqualTo(
+                        asComparable(expression), (Comparable) typed);
+                case "lt" -> cb.lessThan(
+                        asComparable(expression), (Comparable) typed);
+                case "lte" -> cb.lessThanOrEqualTo(
+                        asComparable(expression), (Comparable) typed);
                 case "isnull" -> cb.isNull(expression);
                 case "notnull" -> cb.isNotNull(expression);
-                default -> throw new IllegalArgumentException("Unsupported filter operator: " + operator);
+                default -> throw new IllegalArgumentException(
+                        "Unsupported filter operator: " + operator);
             });
         }
 
         return cb.and(predicates.toArray(Predicate[]::new));
+    }
+
+    /**
+     * Resolves a scalar JPA path and automatically creates LEFT joins for
+     * relationship segments. Collection relationships are therefore usable
+     * from generic BI requests without hand-written JPQL.
+     */
+    private Expression<?> resolvePath(
+            Root<?> root,
+            String path,
+            Map<String, From<?, ?>> joins) {
+
+        if (path == null || path.isBlank()) {
+            throw new IllegalArgumentException("BI field path cannot be blank");
+        }
+
+        String[] parts = path.split("\\.");
+        From<?, ?> current = root;
+        StringBuilder joinPath = new StringBuilder();
+
+        for (int i = 0; i < parts.length; i++) {
+            String part = parts[i].trim();
+            if (part.isEmpty()) {
+                throw new IllegalArgumentException("Invalid BI field path: " + path);
+            }
+
+            ManagedType<?> managed = entityManager.getMetamodel()
+                    .managedType(current.getJavaType());
+            Attribute<?, ?> attribute;
+
+            try {
+                attribute = managed.getAttribute(part);
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "Unknown BI field '" + path + "' on "
+                                + managed.getJavaType().getSimpleName(), ex);
+            }
+
+            boolean association = attribute.getPersistentAttributeType()
+                    != Attribute.PersistentAttributeType.BASIC
+                    && attribute.getPersistentAttributeType()
+                    != Attribute.PersistentAttributeType.EMBEDDED;
+
+            if (!association) {
+                if (i != parts.length - 1) {
+                    throw new IllegalArgumentException(
+                            "BI path '" + path + "' traverses through scalar field '" + part + "'");
+                }
+                return current.get(part);
+            }
+
+            if (joinPath.length() > 0) {
+                joinPath.append('.');
+            }
+            joinPath.append(part);
+
+            String key = joinPath.toString();
+            From<?, ?> join = joins.get(key);
+            if (join == null) {
+                join = current.join(part, JoinType.LEFT);
+                joins.put(key, join);
+            }
+            current = join;
+        }
+
+        return current;
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -178,7 +336,9 @@ public class AggregateReportingService {
     }
 
     private Object convert(String value, Class<?> type) {
-        if (value == null || "null".equalsIgnoreCase(value)) return null;
+        if (value == null || "null".equalsIgnoreCase(value)) {
+            return null;
+        }
         if (type == String.class) return value;
         if (type == Integer.class || type == int.class) return Integer.valueOf(value);
         if (type == Long.class || type == long.class) return Long.valueOf(value);
@@ -193,57 +353,37 @@ public class AggregateReportingService {
         if (type == OffsetDateTime.class) return OffsetDateTime.parse(value);
         if (type == ZonedDateTime.class) return ZonedDateTime.parse(value);
         if (type == OffsetTime.class) return OffsetTime.parse(value);
+
         if (type.isEnum()) {
             return Arrays.stream(type.getEnumConstants())
                     .filter(v -> v.toString().equalsIgnoreCase(value))
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException("Invalid " + type.getSimpleName() + ": " + value));
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Invalid " + type.getSimpleName() + ": " + value));
         }
-        throw new IllegalArgumentException("Unsupported filter type: " + type.getName());
-    }
 
-    private void validate(AggregateRequest request, Class<?> type) {
-        for (String field : request.groupBy()) property(type, field);
-        for (String metric : request.metrics()) {
-            if (!metric.equalsIgnoreCase("count")) {
-                int colon = metric.indexOf(':');
-                if (colon <= 0) throw new IllegalArgumentException("Invalid metric: " + metric);
-                property(type, metric.substring(colon + 1));
-            }
-        }
-        if (request.filters() != null) {
-            for (String key : request.filters().keySet()) {
-                String field = key;
-                int colon = key.lastIndexOf(':');
-                if (colon > 0) field = key.substring(0, colon);
-                property(type, field);
-            }
-        }
+        throw new IllegalArgumentException(
+                "Unsupported BI filter type: " + type.getName());
     }
 
     private CrudRegistry.CrudDescriptor descriptor(String slug) {
         CrudRegistry.CrudDescriptor descriptor = registry.all().get(slug);
-        if (descriptor == null) throw new IllegalArgumentException("Unknown ERP resource: " + slug);
+        if (descriptor == null) {
+            throw new IllegalArgumentException(
+                    "Unknown ERP resource: " + slug);
+        }
         return descriptor;
     }
 
-    private PropertyDescriptor property(Class<?> type, String name) {
-        try {
-            for (PropertyDescriptor p : Introspector.getBeanInfo(type).getPropertyDescriptors()) {
-                if (p.getName().equals(name) && p.getReadMethod() != null
-                        && !"class".equals(name) && !"id".equals(name) && !"version".equals(name)) {
-                    return p;
-                }
-            }
-        } catch (Exception ignored) {
-        }
-        throw new IllegalArgumentException("Unknown report field '" + name + "' on " + type.getSimpleName());
-    }
-
     private boolean isNumber(Class<?> type) {
-        return type != null && (Number.class.isAssignableFrom(type) || type == byte.class
-                || type == short.class || type == int.class || type == long.class
-                || type == float.class || type == double.class);
+        return type != null
+                && (Number.class.isAssignableFrom(type)
+                || type == byte.class
+                || type == short.class
+                || type == int.class
+                || type == long.class
+                || type == float.class
+                || type == double.class);
     }
 
     public record AggregateRequest(
