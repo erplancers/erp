@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth";
 import { LoginPage } from "./pages/LoginPage";
@@ -7,7 +8,7 @@ import { ResourcesPage } from "./pages/ResourcesPage";
 import { ResourcePage } from "./pages/ResourcePage";
 import { BiPage } from "./pages/BiPage";
 
-function Protected({ children }: { children: React.ReactNode }) {
+function Protected({ children }: { children: ReactNode }) {
   const { credentials } = useAuth();
   return credentials ? children : <Navigate to="/login" replace />;
 }
