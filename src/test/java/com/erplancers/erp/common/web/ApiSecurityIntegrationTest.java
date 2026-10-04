@@ -1,6 +1,7 @@
 package com.erplancers.erp.common.web;
 
 import com.erplancers.erp.common.reporting.ErpBiEngine;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.erplancers.erp.common.security.domain.ErpPolicy;
 import com.erplancers.erp.common.security.domain.ErpUser;
 import com.erplancers.erp.common.security.repository.ErpAccessRuleRepository;
@@ -29,6 +30,7 @@ class ApiSecurityIntegrationTest {
     @Autowired ErpAccessRuleRepository policies;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ErpBiEngine bi;
+    @Autowired ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
@@ -70,6 +72,22 @@ class ApiSecurityIntegrationTest {
     @Test void accountingCanReadAuthorizedResource() throws Exception {
         mvc.perform(get("/api/resources/account").with(httpBasic("accounting", "accounting-pass")))
                 .andExpect(status().isOk());
+    }
+
+    @Test void biQueryJsonDeserializes() throws Exception {
+        var request = objectMapper.readValue("""
+                {
+                  "dimensions": ["status"],
+                  "measures": ["count", "sum:amount"],
+                  "filters": {},
+                  "orderBy": "count:desc",
+                  "limit": 100
+                }
+                """, ErpBiEngine.BiQuery.class);
+
+        assertThat(request.dimensions()).containsExactly("status");
+        assertThat(request.measures()).containsExactly("count", "sum:amount");
+        assertThat(request.limit()).isEqualTo(100);
     }
 
     @Test void paymentTransactionBiEngineWorksDirectly() {
