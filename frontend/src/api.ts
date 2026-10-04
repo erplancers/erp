@@ -39,6 +39,8 @@ export async function apiFetch<T>(
 
 export const api = {
   resources: (c: Credentials) => apiFetch<ResourceInfo[]>("/analytics/resources", c),
+  registerAdmin: (body: { username: string; password: string; adminToken: string }) =>
+    fetch(API_BASE + "/auth/register-admin", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(body) }).then(async response => { if (!response.ok) throw new Error((await response.text()) || `Admin registration failed: ${response.status}`); return response.json(); }),
   register: (body: { username: string; password: string }) =>
     fetch(API_BASE + "/auth/register", {
       method: "POST",
