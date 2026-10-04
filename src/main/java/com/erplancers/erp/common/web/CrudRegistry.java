@@ -37,7 +37,7 @@ public class CrudRegistry {
                 slug,
                 entityType,
                 repository,
-                entityType.getPackageName().replace("com.erplancers.erp.", "").split("\\\\.")[0]
+                entityType.getPackageName().replace("com.erplancers.erp.", "").split("\\.")[0]
         ));
     }
 
