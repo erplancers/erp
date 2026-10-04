@@ -45,5 +45,8 @@ export const api={
  olapCatalog:(c:Credentials)=>apiFetch<OlapCatalog>("/bi/olap/catalog",c),
  olapProfiles:(c:Credentials)=>apiFetch<any>("/bi/olap/profiles",c),
  olapCube:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/resources/${encodeURIComponent(slug)}/cube`,c,{method:"POST",body:JSON.stringify(body)}),
- olapDrilldown:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/resources/${encodeURIComponent(slug)}/drilldown`,c,{method:"POST",body:JSON.stringify(body)})
+ olapDrilldown:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/resources/${encodeURIComponent(slug)}/drilldown`,c,{method:"POST",body:JSON.stringify(body)}),
+ autoOlapCubes:(c:Credentials,relationDepth=2)=>apiFetch<import("./types").AutoOlapCatalog>(`/bi/olap/cubes?relationDepth=${relationDepth}`,c),
+ autoOlapRelations:(slug:string,relation:string,c:Credentials,relationDepth=2)=>apiFetch<import("./types").AutoOlapRelationDiscovery>(`/bi/olap/cubes/${encodeURIComponent(slug)}/relations?relation=${encodeURIComponent(relation)}&relationDepth=${relationDepth}`,c),
+ autoOlapQuery:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/cubes/${encodeURIComponent(slug)}/query`,c,{method:"POST",body:JSON.stringify(body)})
 };
