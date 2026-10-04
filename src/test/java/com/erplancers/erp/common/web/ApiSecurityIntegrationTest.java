@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -90,9 +89,24 @@ class ApiSecurityIntegrationTest {
         u.setUsername(username); u.setPassword(passwordEncoder.encode(password)); u.setLevel(level); u.getRoles().add(role);
         return u;
     }
-    private void allowRole(String role, String module, String resource, String action) { policy(null, role, module, resource, action, ErpPolicy.PolicyEffect.ALLOW); }
-    private void denyUser(String username, String module, String resource, String action) { policy(username, null, module, resource, action, ErpPolicy.PolicyEffect.DENY); }
-    private void policy(String username, String role, String module, String resource, String action, ErpPolicy.PolicyEffect effect) {
-        ErpPolicy p = new ErpPolicy(); p.setUsername(username); p.setRole(role); p.setModule(module); p.setResource(resource); p.setAction(action); p.setEffect(effect); policies.save(p);
+
+    private void allowRole(String role, String module, String resource, String action) {
+        policy(null, role, module, resource, action, ErpPolicy.PolicyEffect.ALLOW);
+    }
+
+    private void denyUser(String username, String module, String resource, String action) {
+        policy(username, null, module, resource, action, ErpPolicy.PolicyEffect.DENY);
+    }
+
+    private void policy(String username, String role, String module, String resource, String action,
+                        ErpPolicy.PolicyEffect effect) {
+        ErpPolicy p = new ErpPolicy();
+        p.setUsername(username);
+        p.setRole(role);
+        p.setModule(module);
+        p.setResource(resource);
+        p.setAction(action);
+        p.setEffect(effect);
+        policies.save(p);
     }
 }
