@@ -1,0 +1,19 @@
+FROM eclipse-temurin:25-jdk AS build
+WORKDIR /app
+COPY gradlew gradlew
+COPY gradle gradle
+COPY build.gradle settings.gradle ./
+RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
+COPY src src
+RUN ./gradlew bootJar --no-daemon
+
+FROM eclipse-temurin:25-jre
+WORKDIR /app
+RUN useradd --system --uid 10001 erp
+COPY --from=build /app/build/libs/*.jar /app/app.jar
+RUN chown -R erp:erp /app
+USER erp
+EXPOSE 8080
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=5 CMD wget -q -O /dev/null http://127.0.0.1:8080/actuator/health || exit 1
+ENTRYPOINT ["java","-jar","/app/app.jar"]
