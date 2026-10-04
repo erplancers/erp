@@ -39,9 +39,18 @@ public class EntityDataAnalysisService {
     }
 
     public EntityCatalog catalog() {
+        return catalog(2);
+    }
+
+    /**
+     * Builds the JPA field catalog with a caller-selected relationship depth.
+     * Depth 0 exposes only root scalar fields; depth 1 adds one relationship hop.
+     */
+    public EntityCatalog catalog(int relationDepth) {
+        int depth = normalizeRelationDepth(relationDepth);
         List<ResourceSchema> resources = registry.all().values().stream()
                 .sorted(Comparator.comparing(CrudRegistry.CrudDescriptor::slug))
-                .map(this::schema)
+                .map(descriptor -> schema(descriptor, depth))
                 .toList();
 
         return new EntityCatalog(resources.size(), resources);
@@ -69,11 +78,11 @@ public class EntityDataAnalysisService {
         );
     }
 
-    private ResourceSchema schema(CrudRegistry.CrudDescriptor descriptor) {
+    private ResourceSchema schema(CrudRegistry.CrudDescriptor descriptor, int relationDepth) {
         EntityType<?> entity = entityManager.getMetamodel().entity(descriptor.entityType());
 
         List<FieldSchema> fields = new ArrayList<>();
-        collectBiFields(entity, "", 0, new HashSet<>(), fields);
+        collectBiFields(entity, "", 0, relationDepth, new HashSet<>(), fields);
         fields.sort(Comparator.comparing(FieldSchema::name));
 
         return new ResourceSchema(
@@ -84,16 +93,17 @@ public class EntityDataAnalysisService {
         );
     }
 
-    private static final int BI_RELATIONSHIP_DEPTH = 2;
+    private static final int MAX_RELATIONSHIP_DEPTH = 6;
 
     private void collectBiFields(
             ManagedType<?> type,
             String prefix,
             int depth,
+            int relationDepth,
             Set<Class<?>> visited,
             List<FieldSchema> fields) {
 
-        if (depth > BI_RELATIONSHIP_DEPTH || !visited.add(type.getJavaType())) return;
+        if (depth > relationDepth || !visited.add(type.getJavaType())) return;
 
         type.getAttributes().stream()
                 .sorted(Comparator.comparing(Attribute::getName))
@@ -114,7 +124,7 @@ public class EntityDataAnalysisService {
                             || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_ONE) {
                         ManagedType<?> target = entityManager.getMetamodel()
                                 .managedType(attribute.getJavaType());
-                        collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                        collectBiFields(target, name, depth + 1, relationDepth, new HashSet<>(visited), fields);
                     } else if (attribute instanceof PluralAttribute<?, ?, ?> plural
                             && (attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_MANY
                             || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.MANY_TO_MANY)) {
@@ -125,6 +135,10 @@ public class EntityDataAnalysisService {
                         }
                     }
                 });
+    }
+
+    private int normalizeRelationDepth(int relationDepth) {
+        return Math.max(0, Math.min(relationDepth, MAX_RELATIONSHIP_DEPTH));
     }
 
     private boolean isBasicScalar(Attribute<?, ?> attribute) {
