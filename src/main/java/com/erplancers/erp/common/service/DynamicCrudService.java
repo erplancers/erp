@@ -284,7 +284,7 @@ public class DynamicCrudService {
     private List<Map<String, String>> collectionMetadata(Class<?> type) {
         List<Map<String, String>> result = new ArrayList<>();
         for (PropertyDescriptor p : properties(type)) {
-            if (!isCollection(p) || p.getWriteMethod() == null) continue;
+            if (!isCollection(p) || isNestedCollection(p) || p.getWriteMethod() == null) continue;
             Class<?> elementType = collectionElementType(p);
             if (elementType == null || !EntityBase.class.isAssignableFrom(elementType)) continue;
             Map<String, String> row = new LinkedHashMap<>();
@@ -391,6 +391,12 @@ public class DynamicCrudService {
                 || p.getWriteMethod().isAnnotationPresent(ManyToOne.class)
                 || p.getWriteMethod().isAnnotationPresent(OneToOne.class))
                 && EntityBase.class.isAssignableFrom(p.getPropertyType());
+    }
+
+    private boolean isNestedCollection(PropertyDescriptor p) {
+        return Collection.class.isAssignableFrom(p.getPropertyType())
+                && (p.getReadMethod().isAnnotationPresent(OneToMany.class)
+                || p.getWriteMethod().isAnnotationPresent(OneToMany.class));
     }
 
     private boolean isCollection(PropertyDescriptor p) {
