@@ -1,5 +1,6 @@
 package com.erplancers.erp.common.reporting;
 
+import com.erplancers.erp.common.domain.EntityBase;
 import com.erplancers.erp.common.web.CrudRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -8,6 +9,8 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.PluralAttribute;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
