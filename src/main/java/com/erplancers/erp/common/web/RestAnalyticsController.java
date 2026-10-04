@@ -1,0 +1,97 @@
+package com.erplancers.erp.common.web;
+
+import com.erplancers.erp.common.reporting.AggregateReportingService;
+import com.erplancers.erp.common.reporting.DashboardReportingService;
+import com.erplancers.erp.common.security.PolicyAuthorizationService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@SecurityRequirement(name = "basicAuth")
+@RequiredArgsConstructor
+@RequestMapping("/api/analytics")
+public class RestAnalyticsController {
+
+    private final AggregateReportingService aggregates;
+    private final DashboardReportingService dashboards;
+    private final PolicyAuthorizationService authorization;
+    private final CrudRegistry registry;
+
+    @GetMapping("/dashboard")
+    public DashboardReportingService.Dashboard dashboard(Authentication authentication) {
+        return dashboards.overview();
+    }
+
+    @GetMapping("/resources/{slug}/aggregate")
+    public AggregateReportingService.AggregateReport aggregate(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "") String groupBy,
+            @RequestParam(defaultValue = "count") String metrics,
+            @RequestParam(defaultValue = "") String orderBy,
+            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam Map<String, String> parameters) {
+
+        requireRead(authentication, slug);
+
+        Map<String, String> filters = new LinkedHashMap<>();
+        parameters.forEach((key, value) -> {
+            if (key.startsWith("filter.")) {
+                filters.put(key.substring("filter.".length()), value);
+            }
+        });
+
+        List<String> groups = csv(groupBy);
+        List<String> metricList = csv(metrics);
+
+        return aggregates.aggregate(slug,
+                new AggregateReportingService.AggregateRequest(
+                        groups, metricList, filters, orderBy, limit));
+    }
+
+    @PostMapping("/resources/{slug}/aggregate")
+    public AggregateReportingService.AggregateReport aggregatePost(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestBody AggregateReportingService.AggregateRequest request) {
+        requireRead(authentication, slug);
+        return aggregates.aggregate(slug, request);
+    }
+
+    @GetMapping("/resources")
+    public List<Map<String, Object>> resources(Authentication authentication) {
+        return registry.all().values().stream()
+                .filter(d -> authorization.isAllowed(authentication, d.slug(), "READ"))
+                .map(d -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("module", d.module());
+                    item.put("slug", d.slug());
+                    item.put("name", d.entityType().getSimpleName());
+                    item.put("aggregatePath", "/api/analytics/resources/" + d.slug() + "/aggregate");
+                    return item;
+                })
+                .toList();
+    }
+
+    private void requireRead(Authentication authentication, String slug) {
+        if (!authorization.isAllowed(authentication, slug, "READ")) {
+            throw new AccessDeniedException("Read access denied for ERP resource: " + slug);
+        }
+    }
+
+    private List<String> csv(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toList();
+    }
+}
