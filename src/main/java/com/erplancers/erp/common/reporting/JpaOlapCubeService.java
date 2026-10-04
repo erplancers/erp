@@ -1,5 +1,9 @@
 package com.erplancers.erp.common.reporting;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.metamodel.Attribute;
+import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.PluralAttribute;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,12 +31,15 @@ public class JpaOlapCubeService {
 
     private final EntityDataAnalysisService entityAnalysis;
     private final OlapAnalysisEngine olap;
+    private final EntityManager entityManager;
 
     public JpaOlapCubeService(
             EntityDataAnalysisService entityAnalysis,
-            OlapAnalysisEngine olap) {
+            OlapAnalysisEngine olap,
+            EntityManager entityManager) {
         this.entityAnalysis = entityAnalysis;
         this.olap = olap;
+        this.entityManager = entityManager;
     }
 
     /**
@@ -51,6 +58,42 @@ public class JpaOlapCubeService {
     /**
      * Creates one logical cube from the current JPA metadata.
      */
+    /**
+     * Discovers JPA relationships for one cube. When relation is blank all
+     * direct and nested relationships are returned; otherwise relation may be
+     * a dotted path such as {@code customer.address}.
+     */
+    public RelationDiscovery discoverRelations(String resource, String relation) {
+        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog();
+        EntityDataAnalysisService.ResourceSchema schema = catalog.resources().stream()
+                .filter(r -> r.slug().equals(resource))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown ERP resource: " + resource));
+
+        Class<?> entityType = schemaEntityType(resource);
+        String requested = relation == null ? "" : relation.trim();
+        List<RelationPath> paths = new ArrayList<>();
+        discoverRelationPaths(entityType, "", 0, new LinkedHashSet<>(), paths);
+
+        List<RelationPath> selected = requested.isBlank()
+                ? paths
+                : paths.stream()
+                    .filter(path -> path.path().equals(requested)
+                            || path.path().startsWith(requested + "."))
+                    .toList();
+
+        if (!requested.isBlank() && selected.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Unknown JPA relation '" + requested + "' for cube '" + resource + "'");
+        }
+
+        return new RelationDiscovery(
+                resource,
+                requested,
+                selected);
+    }
+
     public AutoCube cube(String resource) {
         EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog();
 
@@ -73,9 +116,27 @@ public class JpaOlapCubeService {
 
         AutoCube cube = cube(cubeName);
 
-        List<String> dimensions = request.dimensions().isEmpty()
-                ? List.of()
-                : validateDimensions(cube, request.dimensions());
+        String relation = request.relation();
+        List<String> dimensions;
+        if (request.dimensions().isEmpty() && !relation.isBlank()) {
+            RelationDiscovery discovery = discoverRelations(cube.resource(), relation);
+            dimensions = discovery.paths().stream()
+                    .map(RelationPath::path)
+                    .toList();
+        } else {
+            dimensions = request.dimensions().isEmpty()
+                    ? List.of()
+                    : validateDimensions(cube, request.dimensions());
+            if (!relation.isBlank()) {
+                RelationDiscovery discovery = discoverRelations(cube.resource(), relation);
+                String prefix = relation + ".";
+                if (dimensions.stream().noneMatch(d -> d.equals(relation) || d.startsWith(prefix))) {
+                    throw new IllegalArgumentException(
+                            "Requested dimensions do not use JPA relation '" + relation + "'");
+                }
+                dimensions = List.copyOf(dimensions);
+            }
+        }
 
         List<String> measures = request.measures().isEmpty()
                 ? List.of("count")
@@ -92,6 +153,67 @@ public class JpaOlapCubeService {
                         request.includeTotals(),
                         request.includeRollup(),
                         request.pivotDimension()));
+    }
+
+    private Class<?> schemaEntityType(String resource) {
+        return entityAnalysis.catalog().resources().stream()
+                .filter(r -> r.slug().equals(resource))
+                .findFirst()
+                .map(r -> entityManager.getMetamodel().getEntities().stream()
+                        .filter(entity -> entity.getName().equals(r.entity()))
+                        .map(ManagedType::getJavaType)
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                "JPA entity not found for resource: " + resource)))
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unknown ERP resource: " + resource));
+    }
+
+    private void discoverRelationPaths(
+            Class<?> entityType,
+            String prefix,
+            int depth,
+            Set<Class<?>> visited,
+            List<RelationPath> result) {
+        if (depth >= 3 || !visited.add(entityType)) {
+            return;
+        }
+
+        ManagedType<?> type = entityManager.getMetamodel().managedType(entityType);
+        type.getAttributes().stream()
+                .sorted(java.util.Comparator.comparing(Attribute::getName))
+                .forEach(attribute -> {
+                    boolean singular = attribute.getPersistentAttributeType()
+                            == Attribute.PersistentAttributeType.MANY_TO_ONE
+                            || attribute.getPersistentAttributeType()
+                            == Attribute.PersistentAttributeType.ONE_TO_ONE;
+                    boolean plural = attribute instanceof PluralAttribute<?, ?, ?>
+                            && (attribute.getPersistentAttributeType()
+                            == Attribute.PersistentAttributeType.ONE_TO_MANY
+                            || attribute.getPersistentAttributeType()
+                            == Attribute.PersistentAttributeType.MANY_TO_MANY);
+                    if (!singular && !plural) {
+                        return;
+                    }
+
+                    Class<?> target = singular
+                            ? attribute.getJavaType()
+                            : ((PluralAttribute<?, ?, ?>) attribute).getElementType().getJavaType();
+                    if (!entityManager.getMetamodel().getManagedTypes().stream()
+                            .anyMatch(m -> m.getJavaType().equals(target))) {
+                        return;
+                    }
+
+                    String path = prefix.isBlank()
+                            ? attribute.getName()
+                            : prefix + "." + attribute.getName();
+                    result.add(new RelationPath(
+                            path,
+                            target.getName(),
+                            attribute.getPersistentAttributeType().name()));
+                    discoverRelationPaths(target, path, depth + 1,
+                            new LinkedHashSet<>(visited), result);
+                });
     }
 
     private AutoCube createCube(EntityDataAnalysisService.ResourceSchema schema) {
@@ -168,6 +290,18 @@ public class JpaOlapCubeService {
             List<AutoCube> cubes) {
     }
 
+    public record RelationDiscovery(
+            String resource,
+            String relation,
+            List<RelationPath> paths) {
+    }
+
+    public record RelationPath(
+            String path,
+            String targetEntity,
+            String relationshipType) {
+    }
+
     public record AutoCube(
             String name,
             String resource,
@@ -186,9 +320,11 @@ public class JpaOlapCubeService {
             Integer limit,
             Boolean includeTotals,
             Boolean includeRollup,
-            String pivotDimension) {
+            String pivotDimension,
+            String relation) {
 
         public AutoCubeQueryRequest {
+            relation = relation == null ? "" : relation.trim();
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
             measures = measures == null ? List.of() : List.copyOf(measures);
             filters = filters == null ? Map.of() : Map.copyOf(filters);
