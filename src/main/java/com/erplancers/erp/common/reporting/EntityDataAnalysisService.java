@@ -156,8 +156,7 @@ public class EntityDataAnalysisService {
         selections.add(cb.count(field));
         selections.add(cb.countDistinct(field));
 
-        boolean numeric = Number.class.isAssignableFrom(attribute.getJavaType())
-                || attribute.getJavaType().isPrimitive();
+        boolean numeric = isNumeric(attribute.getJavaType());
 
         boolean comparable = supportsOrdering(attribute.getJavaType());
         if (numeric) {
@@ -222,6 +221,16 @@ public class EntityDataAnalysisService {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Expression<? extends Comparable> asComparable(Expression<?> expression) {
         return (Expression) expression;
+    }
+
+    private boolean isNumeric(Class<?> type) {
+        return Number.class.isAssignableFrom(type)
+                || type == byte.class
+                || type == short.class
+                || type == int.class
+                || type == long.class
+                || type == float.class
+                || type == double.class;
     }
 
     private boolean supportsOrdering(Class<?> type) {
