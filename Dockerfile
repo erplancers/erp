@@ -9,7 +9,10 @@ RUN ./gradlew bootJar --no-daemon
 
 FROM eclipse-temurin:25-jre
 WORKDIR /app
-RUN useradd --system --uid 10001 erp
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 erp
 COPY --from=build /app/build/libs/*.jar /app/app.jar
 RUN chown -R erp:erp /app
 USER erp
