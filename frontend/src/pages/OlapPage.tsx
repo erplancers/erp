@@ -374,8 +374,11 @@ export function OlapPage() {
                       setDimensions((event.value ?? []) as string[])
                     }
                     placeholder="Select dimensions"
-                    display="chip"
+                    display="comma"
+                    maxSelectedLabels={3}
+                    selectedItemsLabel="{0} dimensions selected"
                     filter
+                    virtualScrollerOptions={{ itemSize: 40 }}
                     className="field-control"
                   />
                 </label>
@@ -704,8 +707,11 @@ export function OlapPage() {
                     setReportError("");
                   }}
                   placeholder="Customer / Product / Order"
-                  display="chip"
+                  display="comma"
+                  maxSelectedLabels={3}
+                  selectedItemsLabel="{0} relationships selected"
                   filter
+                  virtualScrollerOptions={{ itemSize: 40 }}
                   className="field-control"
                 />
               </label>
@@ -749,8 +755,11 @@ export function OlapPage() {
                     )
                   }
                   placeholder="Select customer/product fields"
-                  display="chip"
+                  display="comma"
+                  maxSelectedLabels={3}
+                  selectedItemsLabel="{0} dimensions selected"
                   filter
+                  virtualScrollerOptions={{ itemSize: 40 }}
                   className="field-control"
                 />
               </label>
