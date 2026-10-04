@@ -145,10 +145,16 @@ public class JpaOlapCubeService {
         List<String> dimensions;
         if (request.dimensions().isEmpty() && !relation.isBlank()) {
             RelationDiscovery discovery = discoverRelations(cube.resource(), relation, relationDepth);
-            dimensions = discovery.paths().stream()
-                    .map(RelationPath::path)
-                    .filter(path -> cube.dimensions().contains(path))
+            String prefix = relation + ".";
+            dimensions = cube.dimensions().stream()
+                    .filter(path -> path.startsWith(prefix))
                     .toList();
+
+            if (dimensions.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "JPA relation '" + relation + "' has no scalar dimensions at relation depth "
+                                + relationDepth + " for cube '" + cube.resource() + "'");
+            }
         } else {
             dimensions = request.dimensions().isEmpty()
                     ? List.of()
