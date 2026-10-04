@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.util.ArrayList;
@@ -76,8 +77,10 @@ public class CrudController {
     @PostMapping("/{slug}/save")
     public String save(@PathVariable String slug,
                        @RequestParam(required = false) Long id,
-                       @RequestParam Map<String, String> values,
+                       @RequestParam MultiValueMap<String, String> rawValues,
                        RedirectAttributes redirectAttributes) {
+        Map<String, String> values = new java.util.LinkedHashMap<>();
+        rawValues.forEach((key, items) -> values.put(key, key.startsWith("collection.") ? String.join(",", items) : items.isEmpty() ? "" : items.get(items.size() - 1)));
         values.remove("id");
         var saved = service.save(slug, id, values);
         redirectAttributes.addFlashAttribute("message",
