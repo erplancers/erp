@@ -46,6 +46,15 @@ public class RestBiController {
         return jpaOlap.cubes();
     }
 
+    @GetMapping("/olap/cubes/{cube}/relations")
+    public JpaOlapCubeService.RelationDiscovery relations(
+            Authentication authentication,
+            @PathVariable String cube,
+            @RequestParam(required = false, defaultValue = "") String relation) {
+        requireRead(authentication, cube);
+        return jpaOlap.discoverRelations(cube, relation);
+    }
+
     @GetMapping("/olap/cubes/{cube}")
     public JpaOlapCubeService.AutoCube autoCube(
             Authentication authentication,
