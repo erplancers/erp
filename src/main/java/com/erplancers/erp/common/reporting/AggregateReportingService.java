@@ -62,7 +62,7 @@ public class AggregateReportingService {
             selections.add(metricExpression(cb, root, metric));
         }
 
-        query.multiselect(selections);
+        query.multiselect(selections.toArray(Expression[]::new));
         Predicate predicate = predicates(cb, root, request.filters());
         if (predicate != null) {
             query.where(predicate);
