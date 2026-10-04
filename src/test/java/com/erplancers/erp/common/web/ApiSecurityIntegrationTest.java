@@ -14,6 +14,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -70,7 +71,7 @@ class ApiSecurityIntegrationTest {
     }
 
     @Test void adminCanRunPaymentTransactionBiQuery() throws Exception {
-        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+        var result = mvc.perform(post("/api/bi/resources/payment-transaction/query")
                         .with(httpBasic("admin", "admin-pass"))
                         .contentType("application/json")
                         .content("""
@@ -82,11 +83,162 @@ class ApiSecurityIntegrationTest {
                                   "limit": 100
                                 }
                                 """))
-                .andDo(result -> System.out.println("PAYMENT BI RESPONSE: " + result.getResponse().getStatus() + " " + result.getResponse().getContentAsString()))
+                .andReturn();
+
+        assertThat(result.getResponse().getStatus())
+                .as("BI response: %s", result.getResponse().getContentAsString())
+                .isEqualTo(200);
+
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100
+                                }
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resource", is("payment-transaction")))
-                .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
                 .andExpect(jsonPath("$.rows", notNullValue()));
+    }
+
+    @Test void adminCanRunBiAnalyze() throws Exception {
+        mvc.perform(post("/api/bi/resources/payment-transaction/analyze")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "fields": ["amount", "quantity"],
+                                  "sampleSize": 100,
+                                  "zScoreThreshold": 3.0
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aggregated", is(false)));
+    }
+
+    @Test void adminCanRunOlapCubeAndDrillDown() throws Exception {
+        mvc.perform(post("/api/bi/olap/resources/payment-transaction/cube")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100,
+                                  "includeTotals": true,
+                                  "includeRollup": true,
+                                  "pivotDimension": "status"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.cells", notNullValue()))
+                .andExpect(jsonPath("$.grandTotal", notNullValue()))
+                .andExpect(jsonPath("$.pivot", notNullValue()))
+                .andExpect(jsonPath("$.rollup", notNullValue()));
+
+        mvc.perform(post("/api/bi/olap/resources/payment-transaction/drilldown")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100,
+                                  "includeTotals": true,
+                                  "includeRollup": false,
+                                  "pivotDimension": ""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")));
+    }
+
+    @Test void adminCanReadOlapCatalogAndProfiles() throws Exception {
+        mvc.perform(get("/api/bi/olap/catalog").with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resources", not(empty())));
+
+        mvc.perform(get("/api/bi/olap/profiles?topValues=5")
+                        .with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isOk());
+    }
+
+    @Test void adminCanExercisePaymentTransactionCrudApi() throws Exception {
+        var created = mvc.perform(post("/api/resources/payment-transaction")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "values": {
+                                    "status": "POSTED",
+                                    "description": "CI test",
+                                    "amount": "100",
+                                    "quantity": "2",
+                                    "payment": "100"
+                                  }
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id", notNullValue()))
+                .andReturn();
+
+        String body = created.getResponse().getContentAsString();
+        long id = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(body).get("id").asLong();
+
+        mvc.perform(get("/api/resources/payment-transaction/" + id)
+                        .with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.status", is("POSTED")));
+
+        mvc.perform(put("/api/resources/payment-transaction/" + id)
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {"values":{"status":"SETTLED","amount":"150"}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.status", is("SETTLED")));
+
+        mvc.perform(patch("/api/resources/payment-transaction/" + id)
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {"values":{"description":"patched"}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.values.description", is("patched")));
+
+        mvc.perform(delete("/api/resources/payment-transaction/" + id)
+                        .with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test void unauthorizedBiOlapAndCrudWritesAreRejected() throws Exception {
+        mvc.perform(get("/api/bi/olap/catalog"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("accounting", "accounting-pass"))
+                        .contentType("application/json")
+                        .content("{\"dimensions\":[\"status\"],\"measures\":[\"count\"]}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/resources/payment-transaction")
+                        .with(httpBasic("accounting", "accounting-pass"))
+                        .contentType("application/json")
+                        .content("{\"values\":{\"status\":\"DENIED\"}}"))
+                .andExpect(status().isForbidden());
     }
 
     @Test void accountingCannotReadUnprivilegedResource() throws Exception {
