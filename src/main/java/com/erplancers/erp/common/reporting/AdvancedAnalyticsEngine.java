@@ -126,10 +126,10 @@ public class AdvancedAnalyticsEngine {
         CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
         Root<?> root = query.from(entityType);
 
-        List<Expression<?>> selections = fields.stream()
-                .map(root::get)
-                .map(expression -> (Expression<?>) expression)
-                .toList();
+        List<Expression<?>> selections = new ArrayList<>();
+        for (String field : fields) {
+            selections.add(root.get(field));
+        }
 
         query.multiselect(selections.toArray(Expression[]::new));
 
