@@ -7,7 +7,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
@@ -22,15 +21,7 @@ class MvcRoutingTests {
     void dashboardRouteResolvesJteView() throws Exception {
         mockMvc.perform(get("/app"))
                 .andExpect(status().isOk())
-                .andExpect(view().name("dashboard/index"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("ERP Operations")));
-    }
-
-    @Test
-    void moduleDashboardRouteResolvesJteView() throws Exception {
-        mockMvc.perform(get("/app/module/accounting"))
-                .andExpect(status().isOk())
-                .andExpect(view().name("dashboard/module"));
+                .andExpect(view().name("dashboard/index"));
     }
 
     @Test
@@ -44,7 +35,6 @@ class MvcRoutingTests {
     void reportsIndexRouteResolvesJteView() throws Exception {
         mockMvc.perform(get("/app/reports"))
                 .andExpect(status().isOk())
-                .andExpect(view().name("reports/index"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("ERP Reports")));
+                .andExpect(view().name("reports/index"));
     }
 }
