@@ -46,10 +46,19 @@ public class JpaOlapCubeService {
      * Creates a cube definition for every registered JPA entity.
      */
     public AutoCubeCatalog cubes() {
-        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog();
+        return cubes(2);
+    }
+
+    /**
+     * Creates an automatic cube for every registered entity using the supplied
+     * maximum relationship hop count.
+     */
+    public AutoCubeCatalog cubes(int relationDepth) {
+        int depth = normalizeRelationDepth(relationDepth);
+        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog(depth);
 
         List<AutoCube> cubes = catalog.resources().stream()
-                .map(this::createCube)
+                .map(schema -> createCube(schema, depth))
                 .toList();
 
         return new AutoCubeCatalog(cubes.size(), cubes);
@@ -64,7 +73,17 @@ public class JpaOlapCubeService {
      * a dotted path such as {@code customer.address}.
      */
     public RelationDiscovery discoverRelations(String resource, String relation) {
-        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog();
+        return discoverRelations(resource, relation, 2);
+    }
+
+    /**
+     * Discovers JPA relationship paths up to the requested relationship hop
+     * count. A depth of 1 means direct relationships, depth 2 includes
+     * relationships of those related entities, etc.
+     */
+    public RelationDiscovery discoverRelations(String resource, String relation, int relationDepth) {
+        int depthLimit = normalizeRelationDepth(relationDepth);
+        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog(depthLimit);
         EntityDataAnalysisService.ResourceSchema schema = catalog.resources().stream()
                 .filter(r -> r.slug().equals(resource))
                 .findFirst()
@@ -74,7 +93,7 @@ public class JpaOlapCubeService {
         Class<?> entityType = schemaEntityType(resource);
         String requested = relation == null ? "" : relation.trim();
         List<RelationPath> paths = new ArrayList<>();
-        discoverRelationPaths(entityType, "", 0, new LinkedHashSet<>(), paths);
+        discoverRelationPaths(entityType, "", 0, depthLimit, new LinkedHashSet<>(), paths);
 
         List<RelationPath> selected = requested.isBlank()
                 ? paths
@@ -95,7 +114,12 @@ public class JpaOlapCubeService {
     }
 
     public AutoCube cube(String resource) {
-        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog();
+        return cube(resource, 2);
+    }
+
+    public AutoCube cube(String resource, int relationDepth) {
+        int depth = normalizeRelationDepth(relationDepth);
+        EntityDataAnalysisService.EntityCatalog catalog = entityAnalysis.catalog(depth);
 
         EntityDataAnalysisService.ResourceSchema schema = catalog.resources().stream()
                 .filter(r -> r.slug().equals(resource))
@@ -103,7 +127,7 @@ public class JpaOlapCubeService {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown ERP resource: " + resource));
 
-        return createCube(schema);
+        return createCube(schema, depth);
     }
 
     /**
@@ -114,21 +138,23 @@ public class JpaOlapCubeService {
             String cubeName,
             AutoCubeQueryRequest request) {
 
-        AutoCube cube = cube(cubeName);
+        int relationDepth = normalizeRelationDepth(request.relationDepth());
+        AutoCube cube = cube(cubeName, relationDepth);
 
         String relation = request.relation();
         List<String> dimensions;
         if (request.dimensions().isEmpty() && !relation.isBlank()) {
-            RelationDiscovery discovery = discoverRelations(cube.resource(), relation);
+            RelationDiscovery discovery = discoverRelations(cube.resource(), relation, relationDepth);
             dimensions = discovery.paths().stream()
                     .map(RelationPath::path)
+                    .filter(path -> cube.dimensions().contains(path))
                     .toList();
         } else {
             dimensions = request.dimensions().isEmpty()
                     ? List.of()
                     : validateDimensions(cube, request.dimensions());
             if (!relation.isBlank()) {
-                RelationDiscovery discovery = discoverRelations(cube.resource(), relation);
+                RelationDiscovery discovery = discoverRelations(cube.resource(), relation, relationDepth);
                 String prefix = relation + ".";
                 if (dimensions.stream().noneMatch(d -> d.equals(relation) || d.startsWith(prefix))) {
                     throw new IllegalArgumentException(
@@ -173,9 +199,10 @@ public class JpaOlapCubeService {
             Class<?> entityType,
             String prefix,
             int depth,
+            int relationDepth,
             Set<Class<?>> visited,
             List<RelationPath> result) {
-        if (depth >= 3 || !visited.add(entityType)) {
+        if (depth >= relationDepth || !visited.add(entityType)) {
             return;
         }
 
@@ -212,11 +239,11 @@ public class JpaOlapCubeService {
                             target.getName(),
                             attribute.getPersistentAttributeType().name()));
                     discoverRelationPaths(target, path, depth + 1,
-                            new LinkedHashSet<>(visited), result);
+                            relationDepth, new LinkedHashSet<>(visited), result);
                 });
     }
 
-    private AutoCube createCube(EntityDataAnalysisService.ResourceSchema schema) {
+    private AutoCube createCube(EntityDataAnalysisService.ResourceSchema schema, int relationDepth) {
         List<String> dimensions = schema.fields().stream()
                 .map(EntityDataAnalysisService.FieldSchema::name)
                 .toList();
@@ -276,6 +303,10 @@ public class JpaOlapCubeService {
         return List.copyOf(requested);
     }
 
+    private int normalizeRelationDepth(int relationDepth) {
+        return Math.max(0, Math.min(relationDepth, 6));
+    }
+
     private boolean isNumeric(String javaType) {
         return Set.of(
                 "byte", "short", "int", "long", "float", "double",
@@ -333,6 +364,7 @@ public class JpaOlapCubeService {
             includeTotals = Boolean.TRUE.equals(includeTotals);
             includeRollup = Boolean.TRUE.equals(includeRollup);
             pivotDimension = pivotDimension == null ? "" : pivotDimension;
+            relationDepth = relationDepth == null ? 2 : Math.max(0, Math.min(relationDepth, 6));
         }
     }
 }
