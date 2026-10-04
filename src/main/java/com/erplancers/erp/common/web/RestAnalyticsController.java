@@ -2,6 +2,7 @@ package com.erplancers.erp.common.web;
 
 import com.erplancers.erp.common.reporting.AggregateReportingService;
 import com.erplancers.erp.common.reporting.DashboardReportingService;
+import com.erplancers.erp.common.reporting.EntityDataAnalysisService;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +23,28 @@ public class RestAnalyticsController {
 
     private final AggregateReportingService aggregates;
     private final DashboardReportingService dashboards;
+    private final EntityDataAnalysisService analysis;
     private final PolicyAuthorizationService authorization;
     private final CrudRegistry registry;
 
     @GetMapping("/dashboard")
     public DashboardReportingService.Dashboard dashboard(Authentication authentication) {
         return dashboards.overview();
+    }
+
+    @GetMapping("/catalog")
+    public EntityDataAnalysisService.EntityCatalog catalog(Authentication authentication) {
+        requireAuthenticated(authentication);
+        return analysis.catalog();
+    }
+
+    @GetMapping("/resources/{slug}/profile")
+    public EntityDataAnalysisService.EntityProfile profile(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "10") int topValues) {
+        requireRead(authentication, slug);
+        return analysis.profile(slug, topValues);
     }
 
     @GetMapping("/resources/{slug}/aggregate")
@@ -79,6 +96,12 @@ public class RestAnalyticsController {
                     return item;
                 })
                 .toList();
+    }
+
+    private void requireAuthenticated(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required for ERP analytics");
+        }
     }
 
     private void requireRead(Authentication authentication, String slug) {
