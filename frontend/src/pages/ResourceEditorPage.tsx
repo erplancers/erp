@@ -418,9 +418,11 @@ export function ResourceEditorPage() {
       </Card>
 
       {nestedCollections.map((collection) => {
-        const activeRows = (nestedRows[collection.name] || []).filter(
-          (row) => row._delete !== "true"
-        );
+        const allRows = nestedRows[collection.name] || [];
+        const activeRows = allRows.filter((row) => row._delete !== "true");
+        const deletedRows = allRows
+          .map((row, index) => ({ row, index }))
+          .filter(({ row }) => row._delete === "true");
         return (
           <Card key={collection.name} className="mt-3">
             <div className="flex align-items-center justify-content-between gap-2 flex-wrap mb-3">
@@ -511,6 +513,41 @@ export function ResourceEditorPage() {
                   )}
                 />
               </DataTable>
+            )}
+
+            {deletedRows.length > 0 && (
+              <div className="mt-3">
+                <div className="flex align-items-center gap-2 mb-2">
+                  <span className="font-semibold">Pending deletion</span>
+                  <Tag value={String(deletedRows.length)} severity="danger" />
+                </div>
+                <DataTable
+                  value={deletedRows.map(({ row, index }) => ({ ...row, __index: index }))}
+                  dataKey="_key"
+                  size="small"
+                  stripedRows
+                >
+                  <Column header="#" body={(_, options) => options.rowIndex + 1} style={{ width: "4rem" }} />
+                  {Object.entries(collection.fields)
+                    .filter(([name]) => name !== "id" && name !== "version")
+                    .slice(0, 3)
+                    .map(([name]) => (
+                      <Column key={name} field={name} header={name} body={(row) => row[name] || "—"} />
+                    ))}
+                  <Column
+                    header="Actions"
+                    body={(row) => (
+                      <Button
+                        label="Restore"
+                        icon="pi pi-undo"
+                        text
+                        size="small"
+                        onClick={() => restoreAggregate(collection.name, row.__index)}
+                      />
+                    )}
+                  />
+                </DataTable>
+              </div>
             )}
 
             {activeRows.map((row) => {
