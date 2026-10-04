@@ -6,6 +6,7 @@ import com.erplancers.erp.common.service.DynamicCrudService;
 import com.erplancers.erp.common.web.dto.CrudRequest;
 import com.erplancers.erp.common.web.dto.ResourceDto;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,7 @@ import java.util.Map;
  * Authorization is checked per resource first, then by module.
  */
 @RestController
+@SecurityRequirement(name = "basicAuth")
 @RequiredArgsConstructor
 @RequestMapping("/api/resources")
 public class RestCrudController {
