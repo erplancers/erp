@@ -10,3 +10,5 @@ export interface EntityCatalog { resourceCount:number; resources:ResourceSchema[
 export interface ReportResource { module:string; slug:string; name:string; path:string; }
 export interface ModuleReport { [key:string]:unknown; }
 export interface OlapCatalog { [key:string]:unknown; }
+export interface AutoOlapCube { name:string; resource:string; module:string; entity:string; dimensions:string[]; measures:string[]; relationships:string[]; }
+export interface AutoOlapCatalog { cubeCount:number; cubes:AutoOlapCube[]; }
