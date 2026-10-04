@@ -100,7 +100,7 @@ public class DynamicCrudService {
                     .map(id -> targetDescriptor.repository().findById(id)
                             .orElseThrow(() -> new IllegalArgumentException("Related " + elementType.getSimpleName() + " not found: " + id)))
                     .collect(Collectors.toCollection(ArrayList::new));
-            wrapper.setPropertyValue(property.getName(), related);
+            wrapper.setPropertyValue(property.getName(), collectionValue(wrapper.getPropertyType(property.getName()), related));
         }
     }
 
@@ -118,6 +118,7 @@ public class DynamicCrudService {
         metadata.put("collections", collectionMetadata(descriptor.entityType()));
         metadata.put("options", relationshipOptions(descriptor.entityType()));
         metadata.put("values", id == null ? Map.of() : get(slug, id));
+        metadata.put("selected", id == null ? Map.of() : selectedRelationships(descriptor.entityType(), id));
         return metadata;
     }
 
@@ -180,6 +181,29 @@ public class DynamicCrudService {
             result.put(p.getName(), options);
         }
         return result;
+    }
+
+    private Object collectionValue(Class<?> collectionType, Collection<Object> values) {
+        if (collectionType != null && Set.class.isAssignableFrom(collectionType)) return new LinkedHashSet<>(values);
+        if (collectionType != null && Queue.class.isAssignableFrom(collectionType)) return new LinkedList<>(values);
+        return new ArrayList<>(values);
+    }
+
+    private Map<String, Object> selectedRelationships(Class<?> type, Long id) {
+        Object entity = findByEntityType(type).repository().findById(id).orElseThrow();
+        BeanWrapper wrapper = new BeanWrapperImpl(entity);
+        Map<String, Object> selected = new LinkedHashMap<>();
+        for (PropertyDescriptor p : properties(type)) {
+            if (isReference(p) && wrapper.isReadableProperty(p.getName())) {
+                Object value = wrapper.getPropertyValue(p.getName());
+                if (value instanceof EntityBase related) selected.put(p.getName(), related.getId());
+            } else if (isCollection(p) && wrapper.isReadableProperty(p.getName())) {
+                Object value = wrapper.getPropertyValue(p.getName());
+                if (value instanceof Collection<?> collection) selected.put(p.getName(), collection.stream()
+                        .filter(EntityBase.class::isInstance).map(EntityBase.class::cast).map(EntityBase::getId).toList());
+            }
+        }
+        return selected;
     }
 
     private CrudRegistry.CrudDescriptor findByEntityType(Class<?> type) {
