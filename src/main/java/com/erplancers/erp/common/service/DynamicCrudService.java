@@ -169,7 +169,18 @@ public class DynamicCrudService {
     }
 
     private List<Map<String, Object>> nestedCollectionMetadata(Class<?> type, Long id) {
-        Map<String, Object> currentValues = id == null ? Map.of() : get(type, id);
+        Map<String, Object> currentValues = new LinkedHashMap<>();
+        if (id != null) {
+            Object parent = findByEntityType(type).repository().findById(id).orElse(null);
+            if (parent instanceof EntityBase entity) {
+                BeanWrapper parentWrapper = new BeanWrapperImpl(entity);
+                for (PropertyDescriptor property : properties(type)) {
+                    if (isCollection(property) && parentWrapper.isReadableProperty(property.getName())) {
+                        currentValues.put(property.getName(), parentWrapper.getPropertyValue(property.getName()));
+                    }
+                }
+            }
+        }
         List<Map<String, Object>> result = new ArrayList<>();
         for (PropertyDescriptor property : properties(type)) {
             if (!isCollection(property) || property.getWriteMethod() == null) continue;
