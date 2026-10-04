@@ -19,13 +19,6 @@ public class CrudController {
     private final CrudRegistry registry;
     private final DynamicCrudService service;
 
-    @GetMapping
-    public String index(Model model) {
-        model.addAttribute("resources", registry.all().values());
-        model.addAttribute("counts", service.counts());
-        return "crud/index";
-    }
-
     @GetMapping("/{slug}")
     public String list(@PathVariable String slug,
                        @RequestParam(defaultValue = "0") int page,
