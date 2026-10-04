@@ -1,5 +1,6 @@
 package com.erplancers.erp.common.reporting;
 
+import com.erplancers.erp.common.domain.EntityBase;
 import com.erplancers.erp.common.web.CrudRegistry;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -8,6 +9,8 @@ import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.EntityType;
+import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.PluralAttribute;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +21,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 @Service
 @Transactional(readOnly = true)
@@ -67,15 +72,9 @@ public class EntityDataAnalysisService {
     private ResourceSchema schema(CrudRegistry.CrudDescriptor descriptor) {
         EntityType<?> entity = entityManager.getMetamodel().entity(descriptor.entityType());
 
-        List<FieldSchema> fields = entity.getAttributes().stream()
-                .filter(this::isBasicScalar)
-                .sorted(Comparator.comparing(Attribute::getName))
-                .map(attribute -> new FieldSchema(
-                        attribute.getName(),
-                        attribute.getJavaType().getName(),
-                        attribute.getPersistentAttributeType().name()
-                ))
-                .toList();
+        List<FieldSchema> fields = new ArrayList<>();
+        collectBiFields(entity, "", 0, new HashSet<>(), fields);
+        fields.sort(Comparator.comparing(FieldSchema::name));
 
         return new ResourceSchema(
                 descriptor.slug(),
@@ -83,6 +82,49 @@ public class EntityDataAnalysisService {
                 descriptor.entityType().getSimpleName(),
                 fields
         );
+    }
+
+    private static final int BI_RELATIONSHIP_DEPTH = 2;
+
+    private void collectBiFields(
+            ManagedType<?> type,
+            String prefix,
+            int depth,
+            Set<Class<?>> visited,
+            List<FieldSchema> fields) {
+
+        if (depth > BI_RELATIONSHIP_DEPTH || !visited.add(type.getJavaType())) return;
+
+        type.getAttributes().stream()
+                .sorted(Comparator.comparing(Attribute::getName))
+                .forEach(attribute -> {
+                    String name = prefix.isBlank()
+                            ? attribute.getName()
+                            : prefix + "." + attribute.getName();
+
+                    if (isBasicScalar(attribute)) {
+                        fields.add(new FieldSchema(
+                                name,
+                                attribute.getJavaType().getName(),
+                                attribute.getPersistentAttributeType().name()));
+                        return;
+                    }
+
+                    if (attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.MANY_TO_ONE
+                            || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_ONE) {
+                        ManagedType<?> target = entityManager.getMetamodel()
+                                .managedType(attribute.getJavaType());
+                        collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                    } else if (attribute instanceof PluralAttribute<?, ?, ?> plural
+                            && (attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_MANY
+                            || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.MANY_TO_MANY)) {
+                        Class<?> elementType = plural.getElementType().getJavaType();
+                        if (EntityBase.class.isAssignableFrom(elementType)) {
+                            ManagedType<?> target = entityManager.getMetamodel().managedType(elementType);
+                            collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                        }
+                    }
+                });
     }
 
     private boolean isBasicScalar(Attribute<?, ?> attribute) {
