@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service("policyAuthorization")
@@ -27,21 +28,18 @@ public class PolicyAuthorizationService {
 
         if (hasRole(authentication, "ADMIN")) return true;
 
-        List<ErpPolicy> rules = policies.findByUsernameIgnoreCaseOrRoleIgnoreCase(username, "__none__")
-                .stream()
-                .filter(p -> appliesToUserOrRole(p, authentication, username))
+        List<String> roles = authentication.getAuthorities().stream()
+                .map(a -> a.getAuthority())
+                .toList();
+        List<ErpPolicy> rules = new ArrayList<>(policies.findByUsernameIgnoreCase(username));
+        if (!roles.isEmpty()) rules.addAll(policies.findByRoleIn(roles));
+        rules = rules.stream()
                 .filter(p -> matches(p, module, slug, action))
                 .toList();
 
         if (rules.stream().anyMatch(p -> p.getEffect() == ErpPolicy.PolicyEffect.DENY)) return false;
         if (rules.stream().anyMatch(p -> p.getEffect() == ErpPolicy.PolicyEffect.ALLOW)) return true;
         return user != null && "ADMIN".equalsIgnoreCase(user.getLevel());
-    }
-
-    private boolean appliesToUserOrRole(ErpPolicy p, Authentication a, String username) {
-        if (p.getUsername() != null && p.getUsername().equalsIgnoreCase(username)) return true;
-        return p.getRole() != null && a.getAuthorities().stream()
-                .anyMatch(x -> normalize(x.getAuthority()).equalsIgnoreCase(normalize(p.getRole())));
     }
 
     private boolean matches(ErpPolicy p, String module, String resource, String action) {
