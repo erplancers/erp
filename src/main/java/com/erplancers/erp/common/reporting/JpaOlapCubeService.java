@@ -352,7 +352,8 @@ public class JpaOlapCubeService {
             Boolean includeTotals,
             Boolean includeRollup,
             String pivotDimension,
-            String relation) {
+            String relation,
+            Integer relationDepth) {
 
         public AutoCubeQueryRequest {
             relation = relation == null ? "" : relation.trim();
