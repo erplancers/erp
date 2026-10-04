@@ -9,7 +9,16 @@ export async function apiFetch<T>(path:string, credentials:Credentials, init:Req
   if(init.body && !headers.has("Content-Type")) headers.set("Content-Type","application/json");
   const response=await fetch(API_BASE+path,{...init,headers,credentials:"same-origin"});
   if(response.status===401) throw new Error("AUTH_REQUIRED"); if(response.status===403) throw new Error("ACCESS_DENIED");
-  if(!response.ok){\n    const body=await response.text();\n    let message = body || `Request failed: ${response.status}`;\n    try {\n      const parsed = JSON.parse(body);\n      message = parsed.message || parsed.error || parsed.detail || message;\n      if (parsed.path) message += ` (${parsed.path})`;\n    } catch { /* keep plain-text response */ }\n    throw new Error(message);\n  }
+  if(!response.ok){
+    const body=await response.text();
+    let message = body || `Request failed: ${response.status}`;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.message || parsed.error || parsed.detail || message;
+      if (parsed.path) message += ` (${parsed.path})`;
+    } catch { /* keep plain-text response */ }
+    throw new Error(message);
+  }
   if(response.status===204)return undefined as T; return response.json() as Promise<T>;
 }
 export const api={
