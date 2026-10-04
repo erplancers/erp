@@ -100,7 +100,7 @@ export function ResourceEditorPage() {
 
   const [values, setValues] = useState<Values>({});
   const [nestedRows, setNestedRows] = useState<Record<string, Values[]>>({});
-  const [openAggregates, setOpenAggregates] = useState<Record<string, number>>({});
+  const [openAggregates, setOpenAggregates] = useState<Record<string, boolean>>({});
 
   const meta = useQuery({
     queryKey: ["metadata", slug, id],
@@ -123,6 +123,7 @@ export function ResourceEditorPage() {
     collections.forEach((collection) => {
       initial[collection.name] = collection.rows.map((row) => ({
         _id: String(row.id),
+        _key: `existing:${String(row.id)}`,
         ...(Object.fromEntries(
           Object.entries(row.values || {}).map(([key, value]) => [
             key,
@@ -216,17 +217,19 @@ export function ResourceEditorPage() {
   }
 
   function addAggregate(collectionName: string) {
-    setNestedRows((current) => ({
-      ...current,
-      [collectionName]: [
-        ...(current[collectionName] || []),
-        { _id: "", _new: "true" }
-      ]
-    }));
-    setOpenAggregates((current) => ({
-      ...current,
-      [collectionName]: (nestedRows[collectionName]?.length || 0)
-    }));
+    const key = `new:${crypto.randomUUID()}`;
+    setNestedRows((current) => {
+      const index = current[collectionName]?.length || 0;
+      const row = { _id: "", _key: key, _new: "true" };
+      setOpenAggregates((open) => ({
+        ...open,
+        [`${collectionName}:${index}`]: true
+      }));
+      return {
+        ...current,
+        [collectionName]: [...(current[collectionName] || []), row]
+      };
+    });
   }
 
   function updateAggregate(
@@ -443,9 +446,10 @@ export function ResourceEditorPage() {
               <DataTable
                 value={activeRows.map((row) => ({
                   ...row,
-                  __index: nestedRows[collection.name].indexOf(row)
+                  __index: nestedRows[collection.name].indexOf(row),
+                  _key: row._key || `existing:${String(row._id)}`
                 }))}
-                dataKey="_id"
+                dataKey="_key"
                 stripedRows
                 responsiveLayout="scroll"
               >
@@ -490,7 +494,7 @@ export function ResourceEditorPage() {
                         onClick={() =>
                           setOpenAggregates((current) => ({
                             ...current,
-                            [`${collection.name}:${row.__index}`]: 1
+                            [`${collection.name}:${row.__index}`]: true
                           }))
                         }
                       />
