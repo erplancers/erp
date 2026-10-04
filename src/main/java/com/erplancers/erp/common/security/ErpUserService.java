@@ -37,6 +37,12 @@ public class ErpUserService {
     }
 
     private void grantDefaultUserAccess() {
+        boolean alreadyConfigured = policies.findByRoleIn(java.util.List.of("USER")).stream()
+                .anyMatch(p -> "*".equals(p.getModule())
+                        && "*".equals(p.getResource())
+                        && p.getEffect() == ErpPolicy.PolicyEffect.ALLOW);
+        if (alreadyConfigured) return;
+
         for (String action : new String[]{"READ", "WRITE", "DELETE"}) {
             ErpPolicy policy = new ErpPolicy();
             policy.setRole("USER");
