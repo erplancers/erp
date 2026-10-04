@@ -220,9 +220,9 @@ public class OlapAnalysisEngine {
             List<String> measures,
             Map<String, String> filters,
             String orderBy,
-            int limit,
-            boolean includeTotals,
-            boolean includeRollup,
+            Integer limit,
+            Boolean includeTotals,
+            Boolean includeRollup,
             String pivotDimension) {
 
         public CubeRequest {
@@ -231,7 +231,9 @@ public class OlapAnalysisEngine {
             filters = filters == null ? Map.of() : Map.copyOf(filters);
             orderBy = orderBy == null ? "" : orderBy;
             pivotDimension = pivotDimension == null ? "" : pivotDimension;
-            limit = limit <= 0 ? 100 : Math.min(limit, 1000);
+            limit = limit == null || limit <= 0 ? 100 : Math.min(limit, 1000);
+            includeTotals = Boolean.TRUE.equals(includeTotals);
+            includeRollup = Boolean.TRUE.equals(includeRollup);
         }
     }
 
@@ -240,9 +242,9 @@ public class OlapAnalysisEngine {
             List<String> measures,
             Map<String, String> filters,
             String orderBy,
-            int limit,
-            boolean includeTotals,
-            boolean includeRollup,
+            Integer limit,
+            Boolean includeTotals,
+            Boolean includeRollup,
             String pivotDimension) {
         public DrillDownRequest {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
@@ -250,7 +252,9 @@ public class OlapAnalysisEngine {
             filters = filters == null ? Map.of() : Map.copyOf(filters);
             orderBy = orderBy == null ? "" : orderBy;
             pivotDimension = pivotDimension == null ? "" : pivotDimension;
-            limit = limit <= 0 ? 100 : Math.min(limit, 1000);
+            limit = limit == null || limit <= 0 ? 100 : Math.min(limit, 1000);
+            includeTotals = Boolean.TRUE.equals(includeTotals);
+            includeRollup = Boolean.TRUE.equals(includeRollup);
         }
     }
 
