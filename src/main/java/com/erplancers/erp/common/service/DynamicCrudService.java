@@ -175,7 +175,7 @@ public class DynamicCrudService {
             List<Map<String, Object>> options = new ArrayList<>();
             d.repository().findAll(PageRequest.of(0, 100)).forEach(entity -> {
                 Map<String, Object> option = new LinkedHashMap<>();
-                option.put("id", entity.getId());
+                option.put("id", ((EntityBase) entity).getId());
                 option.put("label", displayLabel(entity));
                 options.add(option);
             });
