@@ -112,9 +112,9 @@ class AnalyticsOverloadMockMvcTest {
             long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
             if (successful.get() != expectedRequests) {
-                throw new AssertionError(
-                        "Expected " + expectedRequests + " successful requests but got " + successful.get()
-                                + " in " + elapsedMillis + " ms");
+                throw new AssertionError(String.format(
+                        "Expected %d successful requests but got %d in %d ms",
+                        expectedRequests, successful.get(), elapsedMillis));
             }
         } finally {
             executor.shutdownNow();
