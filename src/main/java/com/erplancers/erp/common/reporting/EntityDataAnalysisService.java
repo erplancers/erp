@@ -112,6 +112,14 @@ public class EntityDataAnalysisService {
                         ManagedType<?> target = entityManager.getMetamodel()
                                 .managedType(attribute.getJavaType());
                         collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                    } else if (attribute instanceof PluralAttribute<?, ?, ?> plural
+                            && (attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_MANY
+                            || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.MANY_TO_MANY)) {
+                        Class<?> elementType = plural.getElementType().getJavaType();
+                        if (EntityBase.class.isAssignableFrom(elementType)) {
+                            ManagedType<?> target = entityManager.getMetamodel().managedType(elementType);
+                            collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                        }
                     }
                 });
     }
