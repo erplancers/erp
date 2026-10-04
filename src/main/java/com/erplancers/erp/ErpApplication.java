@@ -2,7 +2,8 @@ package com.erplancers.erp;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-
+import org.springframework.context.annotation.Bean;
+import org.springframework.data.rest.core.config.RepositoryRestConfiguration;
 
 @SpringBootApplication
 public class ErpApplication  {
@@ -10,4 +11,5 @@ public class ErpApplication  {
     public static void main(String[] args) {
         SpringApplication.run(ErpApplication.class, args);
     }
+
 }
