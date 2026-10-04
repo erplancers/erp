@@ -1,4 +1,4 @@
-import type { AggregateReport, AdvancedAnalysis, Dashboard, EntityCatalog, PageResponse, ReportResource, ModuleReport, ResourceInfo, ResourceSchema, BiReport, OlapCatalog } from "./types";
+import type { AggregateReport, AdvancedAnalysis, Dashboard, EntityCatalog, PageResponse, ReportResource, ModuleReport, ResourceInfo, BiReport, OlapCatalog } from "./types";
 
 const API_BASE = "/api";
 export interface Credentials { username: string; password: string; }
