@@ -21,27 +21,48 @@ import type {
   AutoOlapRelationDiscovery
 } from "../types";
 
+type Row = Record<string, unknown>;
+
 type QueryResult = {
-  rows?: Array<Record<string, unknown>>;
-  data?: Array<Record<string, unknown>>;
-  cells?: Array<Record<string, unknown>>;
-  grandTotal?: Record<string, unknown>;
+  rows?: Row[];
+  data?: Row[];
+  cells?: Row[];
+  grandTotal?: Row;
 };
 
-const FILTER_OPERATORS = [
-  "eq",
-  "ne",
-  "like",
-  "gt",
-  "gte",
-  "lt",
-  "lte",
-  "isnull",
-  "notnull"
+type FilterOperator =
+  | "eq"
+  | "ne"
+  | "like"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "isnull"
+  | "notnull";
+
+const FILTER_OPERATORS: Array<{ label: string; value: FilterOperator }> = [
+  { label: "Equals", value: "eq" },
+  { label: "Not equal", value: "ne" },
+  { label: "Contains", value: "like" },
+  { label: "Greater than", value: "gt" },
+  { label: "Greater or equal", value: "gte" },
+  { label: "Less than", value: "lt" },
+  { label: "Less or equal", value: "lte" },
+  { label: "Is null", value: "isnull" },
+  { label: "Is not null", value: "notnull" }
 ];
 
-function resultRows(result: QueryResult | null): Array<Record<string, unknown>> {
+function rowsOf(result: QueryResult | null): Row[] {
   return result?.rows ?? result?.data ?? result?.cells ?? [];
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function options(values: string[]) {
+  return values.map((value) => ({ label: value, value }));
 }
 
 export function OlapPage() {
@@ -50,44 +71,48 @@ export function OlapPage() {
   const [cubeName, setCubeName] = useState("");
   const [dimensions, setDimensions] = useState<string[]>([]);
   const [measures, setMeasures] = useState<string[]>([]);
+
   const [filterField, setFilterField] = useState("");
-  const [filterOperator, setFilterOperator] = useState("eq");
+  const [filterOperator, setFilterOperator] =
+    useState<FilterOperator>("eq");
   const [filterValue, setFilterValue] = useState("");
   const [filters, setFilters] = useState<Record<string, string>>({});
+
   const [orderBy, setOrderBy] = useState("");
   const [limit, setLimit] = useState(100);
   const [includeTotals, setIncludeTotals] = useState(true);
   const [includeRollup, setIncludeRollup] = useState(false);
   const [pivotDimension, setPivotDimension] = useState("");
   const [result, setResult] = useState<QueryResult | null>(null);
-  const [error, setError] = useState("");
+  const [queryError, setQueryError] = useState("");
 
   const [reportDepth, setReportDepth] = useState(2);
   const [reportName, setReportName] = useState("");
   const [reportRelations, setReportRelations] = useState<string[]>([]);
   const [reportDimensions, setReportDimensions] = useState<string[]>([]);
-  const [reportMeasure, setReportMeasure] = useState("count");
+  const [reportMeasure, setReportMeasure] = useState("");
   const [reportResult, setReportResult] = useState<QueryResult | null>(null);
+  const [reportError, setReportError] = useState("");
 
-  const catalog = useQuery({
-    queryKey: ["auto-olap-cubes", credentials?.username],
+  const catalog = useQuery<AutoOlapCatalog>({
+    queryKey: ["auto-olap-cubes", credentials?.username, reportDepth],
     queryFn: () => api.autoOlapCubes(credentials!, reportDepth),
-    enabled: !!credentials
+    enabled: Boolean(credentials),
+    staleTime: 30_000
   });
 
-  const cubes: AutoOlapCube[] =
-    (catalog.data as AutoOlapCatalog | undefined)?.cubes ?? [];
-
+  const cubes = catalog.data?.cubes ?? [];
   const cube = cubes.find((item) => item.name === cubeName);
 
-  const relationQueries = useQuery({
+  const relationQueries = useQuery<AutoOlapRelationDiscovery[]>({
     queryKey: [
       "auto-olap-report-relations",
+      credentials?.username,
       cubeName,
       reportRelations,
       reportDepth
     ],
-    queryFn: async (): Promise<AutoOlapRelationDiscovery[]> =>
+    queryFn: async () =>
       Promise.all(
         reportRelations.map((relation) =>
           api.autoOlapRelations(
@@ -99,36 +124,20 @@ export function OlapPage() {
         )
       ),
     enabled:
-      !!credentials &&
-      !!cubeName &&
+      Boolean(credentials) &&
+      Boolean(cubeName) &&
       reportRelations.length > 0 &&
-      reportDepth > 0
+      reportDepth > 0,
+    staleTime: 30_000
   });
 
   const dimensionOptions = useMemo(
-    () =>
-      (cube?.dimensions ?? []).map((value) => ({
-        label: value,
-        value
-      })),
+    () => options(cube?.dimensions ?? []),
     [cube]
   );
 
   const measureOptions = useMemo(
-    () =>
-      (cube?.measures ?? []).map((value) => ({
-        label: value,
-        value
-      })),
-    [cube]
-  );
-
-  const filterOptions = useMemo(
-    () =>
-      (cube?.dimensions ?? []).map((value) => ({
-        label: value,
-        value
-      })),
+    () => options(cube?.measures ?? []),
     [cube]
   );
 
@@ -136,75 +145,85 @@ export function OlapPage() {
     if (!cube) return [];
 
     if (reportRelations.length === 0) {
-      return cube.dimensions.map((value) => ({
-        label: value,
-        value
-      }));
+      return options(cube.dimensions);
     }
 
-    return cube.dimensions
-      .filter((field) =>
-        reportRelations.some(
-          (relation) =>
-            field === relation || field.startsWith(relation + ".")
-        )
+    const related = cube.dimensions.filter((field) =>
+      reportRelations.some(
+        (relation) =>
+          field === relation || field.startsWith(relation + ".")
       )
-      .map((value) => ({
-        label: value,
-        value
-      }));
+    );
+
+    return options(related);
   }, [cube, reportRelations]);
 
-  const rows = resultRows(result);
-  const reportRows = resultRows(reportResult);
+  const rows = rowsOf(result);
+  const reportRows = rowsOf(reportResult);
   const columns = rows.length ? Object.keys(rows[0]) : [];
   const reportColumns = reportRows.length
     ? Object.keys(reportRows[0])
     : [];
 
-  function resetQueryState() {
-    setFilters({});
+  function resetQuery() {
+    setDimensions([]);
+    setMeasures([]);
     setFilterField("");
-    setFilterValue("");
     setFilterOperator("eq");
+    setFilterValue("");
+    setFilters({});
     setOrderBy("");
+    setLimit(100);
+    setIncludeTotals(true);
+    setIncludeRollup(false);
     setPivotDimension("");
     setResult(null);
-    setError("");
+    setQueryError("");
   }
 
-  function selectCube(value: string) {
-    const selected = cubes.find((item) => item.name === value);
+  function selectCube(value: string | null) {
+    const name = value ?? "";
+    const selected = cubes.find((item) => item.name === name);
 
-    setCubeName(value);
+    setCubeName(name);
     setDimensions(selected?.dimensions.slice(0, 2) ?? []);
     setMeasures(
-      selected?.measures.includes("count")
-        ? ["count"]
-        : selected?.measures.slice(0, 1) ?? []
+      selected
+        ? selected.measures.includes("count")
+          ? ["count"]
+          : selected.measures.slice(0, 1)
+        : []
     );
-    setReportMeasure(
+
+    const defaultMeasure =
       selected?.measures.find((measure) => measure.startsWith("sum:")) ??
-        selected?.measures[0] ??
-        "count"
-    );
+      selected?.measures[0] ??
+      "";
+
+    setReportMeasure(defaultMeasure);
     setReportRelations([]);
     setReportDimensions([]);
     setReportName("");
     setReportResult(null);
-    resetQueryState();
+    setReportError("");
+    resetQuery();
   }
 
   function addFilter() {
     if (!filterField) return;
 
-    const key = filterField + ":" + filterOperator;
+    const needsValue =
+      filterOperator !== "isnull" && filterOperator !== "notnull";
+
+    if (needsValue && !filterValue.trim()) return;
+
+    const key = `${filterField}:${filterOperator}`;
+
     setFilters((previous) => ({
       ...previous,
-      [key]: filterOperator === "isnull" || filterOperator === "notnull"
-        ? ""
-        : filterValue
+      [key]: needsValue ? filterValue : ""
     }));
+
     setFilterField("");
     setFilterValue("");
   }
@@ -218,78 +237,85 @@ export function OlapPage() {
   }
 
   async function runQuery() {
-    if (!cubeName || !cube || dimensions.length === 0 || measures.length === 0) {
+    if (
+      !credentials ||
+      !cube ||
+      dimensions.length === 0 ||
+      measures.length === 0
+    ) {
       return;
     }
 
+    setQueryError("");
+    setResult(null);
+
     try {
-      setError("");
-      setResult(
-        await api.autoOlapQuery(
-          cubeName,
-          {
-            dimensions,
-            measures,
-            filters,
-            orderBy: orderBy || undefined,
-            limit,
-            includeTotals,
-            includeRollup,
-            pivotDimension: pivotDimension || undefined
-          },
-          credentials!
-        )
+      const response = await api.autoOlapQuery(
+        cube.name,
+        {
+          dimensions,
+          measures,
+          filters,
+          orderBy: orderBy || undefined,
+          limit,
+          includeTotals,
+          includeRollup,
+          pivotDimension: pivotDimension || undefined
+        },
+        credentials
       );
-    } catch (cause) {
-      setResult(null);
-      setError(cause instanceof Error ? cause.message : String(cause));
+
+      setResult(response as QueryResult);
+    } catch (error) {
+      setQueryError(errorMessage(error));
     }
   }
 
   async function generateReport() {
     if (
+      !credentials ||
       !cube ||
       reportDimensions.length === 0 ||
-      !reportMeasure ||
-      !credentials
+      !reportMeasure
     ) {
       return;
     }
 
+    setReportError("");
+    setReportResult(null);
+
     try {
-      setError("");
-      setReportResult(
-        await api.autoOlapQuery(
-          cube.name,
-          {
-            dimensions: reportDimensions,
-            measures: [reportMeasure],
-            limit: 1000,
-            includeTotals: true,
-            includeRollup: false
-          },
-          credentials
-        )
+      const response = await api.autoOlapQuery(
+        cube.name,
+        {
+          dimensions: reportDimensions,
+          measures: [reportMeasure],
+          limit: 1000,
+          includeTotals: true,
+          includeRollup: false
+        },
+        credentials
       );
-    } catch (cause) {
-      setReportResult(null);
-      setError(cause instanceof Error ? cause.message : String(cause));
+
+      setReportResult(response as QueryResult);
+    } catch (error) {
+      setReportError(errorMessage(error));
     }
   }
 
   if (catalog.isPending) {
-    return <ProgressSpinner />;
+    return (
+      <div className="flex justify-content-center p-4">
+        <ProgressSpinner />
+      </div>
+    );
   }
 
   if (catalog.isError) {
     return (
       <Message
         severity="error"
-        text={
-          catalog.error instanceof Error
-            ? catalog.error.message
-            : String(catalog.error)
-        }
+        text={errorMessage(catalog.error)}
       />
     );
   }
@@ -305,10 +331,7 @@ export function OlapPage() {
             relationships.
           </p>
         </div>
-        <Tag
-          value={`${cubes.length} cubes`}
-          icon="pi pi-database"
-        />
+        <Tag value={`${cubes.length} cubes`} icon="pi pi-database" />
       </div>
 
       <TabView>
@@ -320,11 +343,10 @@ export function OlapPage() {
                   Cube
                   <Dropdown
                     value={cubeName}
-                    options={cubes.map((item) => ({
-                      label: item.name,
-                      value: item.name
-                    }))}
-                    onChange={(event) => selectCube(event.value)}
+                    options={options(cubes.map((item) => item.name))}
+                    onChange={(event) =>
+                      selectCube(event.value as string | null)
+                    }
                     placeholder="Select a cube"
                     filter
                     showClear
@@ -348,7 +370,9 @@ export function OlapPage() {
                   <MultiSelect
                     value={dimensions}
                     options={dimensionOptions}
-                    onChange={(event) => setDimensions(event.value)}
+                    onChange={(event) =>
+                      setDimensions((event.value ?? []) as string[])
+                    }
                     placeholder="Select dimensions"
                     display="chip"
                     filter
@@ -361,9 +385,12 @@ export function OlapPage() {
                   <MultiSelect
                     value={measures}
                     options={measureOptions}
-                    onChange={(event) => setMeasures(event.value)}
+                    onChange={(event) =>
+                      setMeasures((event.value ?? []) as string[])
+                    }
                     placeholder="Select measures"
                     display="chip"
+                    filter
                     className="field-control"
                   />
                 </label>
@@ -373,8 +400,10 @@ export function OlapPage() {
                     Filter field
                     <Dropdown
                       value={filterField}
-                      options={filterOptions}
-                      onChange={(event) => setFilterField(event.value)}
+                      options={dimensionOptions}
+                      onChange={(event) =>
+                        setFilterField((event.value as string | null) ?? "")
+                      }
                       placeholder="Field"
                       filter
                       showClear
@@ -386,12 +415,11 @@ export function OlapPage() {
                     Operator
                     <Dropdown
                       value={filterOperator}
-                      options={FILTER_OPERATORS.map((value) => ({
-                        label: value,
-                        value
-                      }))}
+                      options={FILTER_OPERATORS}
                       onChange={(event) =>
-                        setFilterOperator(event.value)
+                        setFilterOperator(
+                          event.value as FilterOperator
+                        )
                       }
                       className="field-control"
                     />
@@ -420,22 +448,29 @@ export function OlapPage() {
                       !filterField ||
                       (filterOperator !== "isnull" &&
                         filterOperator !== "notnull" &&
-                        !filterValue)
+                        !filterValue.trim())
                     }
                   />
                 </div>
 
-                {Object.keys(filters).length > 0 && (
+                {Object.entries(filters).length > 0 && (
                   <div className="olap-filter-chips">
                     {Object.entries(filters).map(([key, value]) => (
-                      <Tag
-                        key={key}
-                        value={
-                          value
-                            ? `${key} = ${value}`
-                            : key
-                        }
-                      />
+                      <span key={key} className="inline-flex align-items-center gap-1">
+                        <Tag
+                          value={
+                            value ? `${key} = ${value}` : key
+                          }
+                        />
+                        <Button
+                          icon="pi pi-times"
+                          text
+                          rounded
+                          severity="secondary"
+                          aria-label={`Remove filter ${key}`}
+                          onClick={() => removeFilter(key)}
+                        />
+                      </span>
                     ))}
                   </div>
                 )}
@@ -445,11 +480,10 @@ export function OlapPage() {
                     Order by
                     <Dropdown
                       value={orderBy}
-                      options={measures.map((value) => ({
-                        label: value,
-                        value
-                      }))}
-                      onChange={(event) => setOrderBy(event.value)}
+                      options={options(measures)}
+                      onChange={(event) =>
+                        setOrderBy((event.value as string | null) ?? "")
+                      }
                       placeholder="Measure"
                       showClear
                       className="field-control"
@@ -460,9 +494,10 @@ export function OlapPage() {
                     Limit
                     <InputNumber
                       value={limit}
-                      onValueChange={(event) =>
-                        setLimit(Math.min(1000, Math.max(1, event.value ?? 100)))
-                      }
+                      onValueChange={(event) => {
+                        const value = event.value ?? 100;
+                        setLimit(Math.min(1000, Math.max(1, value)));
+                      }}
                       min={1}
                       max={1000}
                     />
@@ -472,12 +507,11 @@ export function OlapPage() {
                     Pivot
                     <Dropdown
                       value={pivotDimension}
-                      options={dimensions.map((value) => ({
-                        label: value,
-                        value
-                      }))}
+                      options={options(dimensions)}
                       onChange={(event) =>
-                        setPivotDimension(event.value)
+                        setPivotDimension(
+                          (event.value as string | null) ?? ""
+                        )
                       }
                       placeholder="Optional"
                       showClear
@@ -492,17 +526,18 @@ export function OlapPage() {
                       inputId="olap-totals"
                       checked={includeTotals}
                       onChange={(event) =>
-                        setIncludeTotals(!!event.checked)
+                        setIncludeTotals(Boolean(event.checked))
                       }
                     />
                     <label htmlFor="olap-totals">Grand totals</label>
                   </div>
+
                   <div>
                     <Checkbox
                       inputId="olap-rollup"
                       checked={includeRollup}
                       onChange={(event) =>
-                        setIncludeRollup(!!event.checked)
+                        setIncludeRollup(Boolean(event.checked))
                       }
                     />
                     <label htmlFor="olap-rollup">Rollup rows</label>
@@ -545,7 +580,7 @@ export function OlapPage() {
                   </div>
                   <div>
                     <b>Measures</b>
-                    <span>{cube.measures.join(", ")}</span>
+                    <span>{cube.measures.join(", ") || "None"}</span>
                   </div>
                 </div>
               ) : (
@@ -554,10 +589,10 @@ export function OlapPage() {
             </Card>
           </div>
 
-          {error && (
+          {queryError && (
             <Message
               severity="error"
-              text={error}
+              text={queryError}
               style={{ marginTop: "1rem" }}
             />
           )}
@@ -593,7 +628,10 @@ export function OlapPage() {
                   ))}
                 </DataTable>
               ) : (
-                <Message severity="info" text="The query returned no rows." />
+                <Message
+                  severity="info"
+                  text="The query returned no rows."
+                />
               )}
             </Card>
           )}
@@ -631,8 +669,9 @@ export function OlapPage() {
         <TabPanel header="Auto Reports" leftIcon="pi pi-chart-bar">
           <Card title="Report from JPA relationships">
             <p className="olap-help">
-              Build a report directly from discovered JPA relationship paths.
-              For example: <b>income per product by customer</b>.
+              Build a report from discovered JPA relationship paths.
+              Select a fact cube, inspect its relationships, then choose
+              the dimensions and measure for the report.
             </p>
 
             <div className="olap-query-row">
@@ -640,13 +679,13 @@ export function OlapPage() {
                 Fact cube
                 <Dropdown
                   value={cubeName}
-                  options={cubes.map((item) => ({
-                    label: item.name,
-                    value: item.name
-                  }))}
-                  onChange={(event) => selectCube(event.value)}
+                  options={options(cubes.map((item) => item.name))}
+                  onChange={(event) =>
+                    selectCube(event.value as string | null)
+                  }
                   placeholder="Select a fact entity"
                   filter
+                  showClear
                   className="field-control"
                 />
               </label>
@@ -655,14 +694,14 @@ export function OlapPage() {
                 JPA relationships
                 <MultiSelect
                   value={reportRelations}
-                  options={(cube?.relationships ?? []).map((value) => ({
-                    label: value,
-                    value
-                  }))}
+                  options={options(cube?.relationships ?? [])}
                   onChange={(event) => {
-                    setReportRelations(event.value);
+                    setReportRelations(
+                      (event.value ?? []) as string[]
+                    );
                     setReportDimensions([]);
                     setReportResult(null);
+                    setReportError("");
                   }}
                   placeholder="Customer / Product / Order"
                   display="chip"
@@ -675,11 +714,10 @@ export function OlapPage() {
                 Discovery depth
                 <InputNumber
                   value={reportDepth}
-                  onValueChange={(event) =>
-                    setReportDepth(
-                      Math.min(6, Math.max(1, event.value ?? 2))
-                    )
-                  }
+                  onValueChange={(event) => {
+                    const value = event.value ?? 2;
+                    setReportDepth(Math.min(6, Math.max(1, value)));
+                  }}
                   min={1}
                   max={6}
                 />
@@ -695,22 +733,20 @@ export function OlapPage() {
             {relationQueries.isError && (
               <Message
                 severity="error"
-                text={
-                  relationQueries.error instanceof Error
-                    ? relationQueries.error.message
-                    : String(relationQueries.error)
-                }
+                text={errorMessage(relationQueries.error)}
               />
             )}
 
-            {cube && reportRelations.length > 0 && (
+            {cube && (
               <label>
                 Report dimensions
                 <MultiSelect
                   value={reportDimensions}
                   options={reportDimensionOptions}
                   onChange={(event) =>
-                    setReportDimensions(event.value)
+                    setReportDimensions(
+                      (event.value ?? []) as string[]
+                    )
                   }
                   placeholder="Select customer/product fields"
                   display="chip"
@@ -726,7 +762,7 @@ export function OlapPage() {
                   <div key={discovery.relation}>
                     <b>{discovery.relation}</b>
                     <span>
-                      {discovery.paths.length
+                      {discovery.paths.length > 0
                         ? discovery.paths
                             .map(
                               (path) =>
@@ -738,6 +774,10 @@ export function OlapPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {reportError && (
+              <Message severity="error" text={reportError} />
             )}
 
             <div className="olap-query-row">
@@ -758,8 +798,11 @@ export function OlapPage() {
                   value={reportMeasure}
                   options={measureOptions}
                   onChange={(event) =>
-                    setReportMeasure(event.value)
+                    setReportMeasure(
+                      (event.value as string | null) ?? ""
+                    )
                   }
+                  placeholder="Select a measure"
                   className="field-control"
                 />
               </label>
@@ -780,7 +823,8 @@ export function OlapPage() {
           {reportResult && (
             <Card
               title={
-                reportName.trim() || cube?.entity + " report"
+                reportName.trim() ||
+                (cube ? `${cube.entity} report` : "OLAP report")
               }
             >
               <div className="olap-result-meta">
