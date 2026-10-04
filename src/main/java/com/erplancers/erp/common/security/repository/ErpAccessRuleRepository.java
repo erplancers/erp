@@ -7,5 +7,5 @@ import java.util.List;
 
 public interface ErpAccessRuleRepository extends JpaRepository<ErpPolicy, Long> {
     List<ErpPolicy> findByUsernameIgnoreCase(String username);
-    List<ErpPolicy> findByRoleInIgnoreCase(List<String> roles);
+    List<ErpPolicy> findByRoleIn(List<String> roles);
 }
