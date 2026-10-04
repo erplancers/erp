@@ -7,7 +7,7 @@ import com.erplancers.erp.common.security.repository.ErpUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -86,7 +86,10 @@ class ApiSecurityIntegrationTest {
 
     private ErpUser user(String username, String password, String level, String role) {
         ErpUser u = new ErpUser();
-        u.setUsername(username); u.setPassword(passwordEncoder.encode(password)); u.setLevel(level); u.getRoles().add(role);
+        u.setUsername(username);
+        u.setPassword(passwordEncoder.encode(password));
+        u.setLevel(level);
+        u.getRoles().add(role);
         return u;
     }
 
