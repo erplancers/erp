@@ -375,10 +375,11 @@ export function OlapPage() {
                     }
                     placeholder="Select dimensions"
                     display="comma"
-                    maxSelectedLabels={3}
+                    maxSelectedLabels={1}
                     selectedItemsLabel="{0} dimensions selected"
                     filter
                     virtualScrollerOptions={{ itemSize: 40 }}
+                    panelClassName="olap-field-selector-panel"
                     className="field-control"
                   />
                 </label>
@@ -708,10 +709,11 @@ export function OlapPage() {
                   }}
                   placeholder="Customer / Product / Order"
                   display="comma"
-                  maxSelectedLabels={3}
+                  maxSelectedLabels={1}
                   selectedItemsLabel="{0} relationships selected"
                   filter
                   virtualScrollerOptions={{ itemSize: 40 }}
+                  panelClassName="olap-field-selector-panel"
                   className="field-control"
                 />
               </label>
@@ -756,10 +758,11 @@ export function OlapPage() {
                   }
                   placeholder="Select customer/product fields"
                   display="comma"
-                  maxSelectedLabels={3}
+                  maxSelectedLabels={1}
                   selectedItemsLabel="{0} dimensions selected"
                   filter
                   virtualScrollerOptions={{ itemSize: 40 }}
+                  panelClassName="olap-field-selector-panel"
                   className="field-control"
                 />
               </label>
