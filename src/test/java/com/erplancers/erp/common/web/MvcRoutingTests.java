@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.view;
 
-@SpringBootTest
+@SpringBootTest(properties = {"gg.jte.usePrecompiledTemplates=false", "gg.jte.developmentMode=true"})
 @AutoConfigureMockMvc
 class MvcRoutingTests {
 
