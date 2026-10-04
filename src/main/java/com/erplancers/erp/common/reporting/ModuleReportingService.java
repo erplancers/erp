@@ -61,7 +61,7 @@ public class ModuleReportingService {
         Map<String, Map<String, Long>> enums = new LinkedHashMap<>();
 
         for (PropertyDescriptor property : properties(descriptor.entityType())) {
-            if (property.getReadMethod() == null || !property.getName().equals("class")) {
+            if (property.getReadMethod() == null || property.getName().equals("class")\n                    || property.getName().equals("id") || property.getName().equals("version")) continue;
                 Class<?> type = property.getPropertyType();
                 if (isNumber(type)) {
                     numeric.put(property.getName(), numericSummary(sample, property));
