@@ -82,6 +82,7 @@ class ApiSecurityIntegrationTest {
                                   "limit": 100
                                 }
                                 """))
+                .andDo(result -> System.out.println("PAYMENT BI RESPONSE: " + result.getResponse().getStatus() + " " + result.getResponse().getContentAsString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resource", is("payment-transaction")))
                 .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
