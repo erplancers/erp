@@ -78,6 +78,36 @@ class AdvancedAnalyticsMockMvcTest {
     }
 
     @Test
+    void advancedPostCanAnalyzeAggregateMetrics() throws Exception {
+        String body = """
+                {
+                  "fields": ["sum:amount"],
+                  "sampleSize": 50,
+                  "zScoreThreshold": 3.0,
+                  "aggregate": {
+                    "groupBy": ["invoiceType"],
+                    "metrics": ["count", "sum:amount"],
+                    "filters": {},
+                    "orderBy": "count:desc",
+                    "limit": 50
+                  }
+                }
+                """;
+
+        mvc.perform(post("/api/analytics/resources/invoice/advanced")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body)
+                        .with(httpBasic("advanced-admin", "advanced-pass")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.aggregated", is(true)))
+                .andExpect(jsonPath("$.groupBy[0]", is("invoiceType")))
+                .andExpect(jsonPath("$.metrics[1]", is("sum:amount")))
+                .andExpect(jsonPath("$.fields[0]", is("sum:amount")))
+                .andExpect(jsonPath("$.statistics['sum:amount']", notNullValue()))
+                .andExpect(jsonPath("$.correlations['sum:amount']['sum:amount']", isA(Number.class)));
+    }
+
+    @Test
     void advancedEndpointRejectsUnauthenticatedRequests() throws Exception {
         mvc.perform(get("/api/analytics/resources/invoice/advanced"))
                 .andExpect(status().isUnauthorized());
