@@ -65,6 +65,82 @@ function options(values: string[]) {
   return values.map((value) => ({ label: value, value }));
 }
 
+function SelectionSummary({
+  values,
+  label,
+  onClear
+}: {
+  values: string[];
+  label: string;
+  onClear: () => void;
+}) {
+  if (values.length === 0) {
+    return <span className="text-500">None selected</span>;
+  }
+
+  return (
+    <div className="olap-selection-summary">
+      <div className="flex align-items-center gap-2">
+        <Tag value={`${values.length} ${label}`} severity="info" />
+        <Button
+          label="Clear"
+          icon="pi pi-times"
+          text
+          size="small"
+          onClick={onClear}
+        />
+      </div>
+      <div className="olap-selection-list">
+        {values.map((value) => (
+          <span key={value} className="olap-selection-item">
+            {value}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FieldSelector({
+  value,
+  optionValues,
+  placeholder,
+  summaryLabel,
+  onChange,
+  onClear
+}: {
+  value: string[];
+  optionValues: string[];
+  placeholder: string;
+  summaryLabel: string;
+  onChange: (values: string[]) => void;
+  onClear: () => void;
+}) {
+  return (
+    <>
+      <MultiSelect
+        value={value}
+        options={options(optionValues)}
+        onChange={(event) => onChange((event.value ?? []) as string[])}
+        placeholder={placeholder}
+        display="comma"
+        maxSelectedLabels={1}
+        selectedItemsLabel="{0} selected"
+        filter
+        showSelectAll
+        virtualScrollerOptions={{ itemSize: 40 }}
+        panelClassName="olap-field-selector-panel"
+        className="field-control"
+      />
+      <SelectionSummary
+        values={value}
+        label={summaryLabel}
+        onClear={onClear}
+      />
+    </>
+  );
+}
+
 export function OlapPage() {
   const { credentials } = useAuth();
 
@@ -132,12 +208,12 @@ export function OlapPage() {
   });
 
   const dimensionOptions = useMemo(
-    () => options(cube?.dimensions ?? []),
+    () => cube?.dimensions ?? [],
     [cube]
   );
 
   const measureOptions = useMemo(
-    () => options(cube?.measures ?? []),
+    () => cube?.measures ?? [],
     [cube]
   );
 
@@ -145,17 +221,15 @@ export function OlapPage() {
     if (!cube) return [];
 
     if (reportRelations.length === 0) {
-      return options(cube.dimensions);
+      return cube.dimensions;
     }
 
-    const related = cube.dimensions.filter((field) =>
+    return cube.dimensions.filter((field) =>
       reportRelations.some(
         (relation) =>
           field === relation || field.startsWith(relation + ".")
       )
     );
-
-    return options(related);
   }, [cube, reportRelations]);
 
   const rows = rowsOf(result);
@@ -312,33 +386,36 @@ export function OlapPage() {
   }
 
   if (catalog.isError) {
-    return (
-      <Message
-        severity="error"
-        text={errorMessage(catalog.error)}
-      />
-    );
+    return <Message severity="error" text={errorMessage(catalog.error)} />;
   }
 
   return (
-    <>
-      <div className="section-heading">
+    <div className="olap-page">
+      <div className="section-heading olap-header">
         <div>
           <div className="eyebrow">OLAP / CUBES</div>
           <h2>OLAP Cube Explorer</h2>
           <p>
-            Explore virtual cubes generated from JPA entities and their
-            relationships.
+            Build high-dimensional queries without letting large selections
+            overwhelm the workspace.
           </p>
         </div>
-        <Tag value={`${cubes.length} cubes`} icon="pi pi-database" />
+        <div className="flex align-items-center gap-2">
+          <Tag value={`${cubes.length} cubes`} icon="pi pi-database" />
+          {cube && (
+            <Tag
+              value={`${dimensions.length}D · ${measures.length}M`}
+              severity="success"
+            />
+          )}
+        </div>
       </div>
 
       <TabView>
-        <TabPanel header="Cube Query" leftIcon="pi pi-sliders-h">
-          <div className="olap-layout">
-            <Card title="Query Builder">
-              <div className="olap-form">
+        <TabPanel header="Query Builder" leftIcon="pi pi-sliders-h">
+          <div className="olap-workspace">
+            <Card title="1. Select cube">
+              <div className="olap-cube-picker">
                 <label>
                   Cube
                   <Dropdown
@@ -353,176 +430,187 @@ export function OlapPage() {
                     className="field-control"
                   />
                 </label>
-
                 {cube && (
                   <div className="olap-cube-info">
                     <span>
                       <b>{cube.entity}</b> · {cube.module}
                     </span>
                     <span>
+                      {cube.dimensions.length} dimensions ·{" "}
+                      {cube.measures.length} measures ·{" "}
                       {cube.relationships.length} relationships
                     </span>
                   </div>
                 )}
+              </div>
+            </Card>
 
-                <label>
-                  Dimensions
-                  <MultiSelect
+            <div className="olap-builder-grid">
+              <Card title="2. Dimensions">
+                {cube ? (
+                  <FieldSelector
                     value={dimensions}
-                    options={dimensionOptions}
+                    optionValues={dimensionOptions}
+                    placeholder="Search and select dimensions"
+                    summaryLabel="dimensions"
+                    onChange={setDimensions}
+                    onClear={() => setDimensions([])}
+                  />
+                ) : (
+                  <p className="text-500">Select a cube first.</p>
+                )}
+              </Card>
+
+              <Card title="3. Measures">
+                {cube ? (
+                  <FieldSelector
+                    value={measures}
+                    optionValues={measureOptions}
+                    placeholder="Search and select measures"
+                    summaryLabel="measures"
+                    onChange={setMeasures}
+                    onClear={() => setMeasures([])}
+                  />
+                ) : (
+                  <p className="text-500">Select a cube first.</p>
+                )}
+              </Card>
+            </div>
+
+            <Card title="4. Filters">
+              <div className="olap-filter-row">
+                <label>
+                  Field
+                  <Dropdown
+                    value={filterField}
+                    options={options(dimensionOptions)}
                     onChange={(event) =>
-                      setDimensions((event.value ?? []) as string[])
+                      setFilterField((event.value as string | null) ?? "")
                     }
-                    placeholder="Select dimensions"
-                    display="comma"
-                    maxSelectedLabels={1}
-                    selectedItemsLabel="{0} dimensions selected"
+                    placeholder="Dimension"
                     filter
-                    virtualScrollerOptions={{ itemSize: 40 }}
-                    panelClassName="olap-field-selector-panel"
+                    showClear
                     className="field-control"
                   />
                 </label>
 
                 <label>
-                  Measures
-                  <MultiSelect
-                    value={measures}
-                    options={measureOptions}
+                  Operator
+                  <Dropdown
+                    value={filterOperator}
+                    options={FILTER_OPERATORS}
                     onChange={(event) =>
-                      setMeasures((event.value ?? []) as string[])
+                      setFilterOperator(event.value as FilterOperator)
                     }
-                    placeholder="Select measures"
-                    display="chip"
-                    filter
                     className="field-control"
                   />
                 </label>
 
-                <div className="olap-filter-row">
-                  <label>
-                    Filter field
-                    <Dropdown
-                      value={filterField}
-                      options={dimensionOptions}
-                      onChange={(event) =>
-                        setFilterField((event.value as string | null) ?? "")
-                      }
-                      placeholder="Field"
-                      filter
-                      showClear
-                      className="field-control"
-                    />
-                  </label>
-
-                  <label>
-                    Operator
-                    <Dropdown
-                      value={filterOperator}
-                      options={FILTER_OPERATORS}
-                      onChange={(event) =>
-                        setFilterOperator(
-                          event.value as FilterOperator
-                        )
-                      }
-                      className="field-control"
-                    />
-                  </label>
-
-                  <label>
-                    Value
-                    <InputText
-                      value={filterValue}
-                      onChange={(event) =>
-                        setFilterValue(event.target.value)
-                      }
-                      disabled={
-                        filterOperator === "isnull" ||
-                        filterOperator === "notnull"
-                      }
-                    />
-                  </label>
-
-                  <Button
-                    label="Add"
-                    icon="pi pi-plus"
-                    outlined
-                    onClick={addFilter}
+                <label>
+                  Value
+                  <InputText
+                    value={filterValue}
+                    onChange={(event) => setFilterValue(event.target.value)}
                     disabled={
-                      !filterField ||
-                      (filterOperator !== "isnull" &&
-                        filterOperator !== "notnull" &&
-                        !filterValue.trim())
+                      filterOperator === "isnull" ||
+                      filterOperator === "notnull"
                     }
                   />
-                </div>
+                </label>
 
-                {Object.entries(filters).length > 0 && (
-                  <div className="olap-filter-chips">
+                <Button
+                  label="Add filter"
+                  icon="pi pi-plus"
+                  outlined
+                  onClick={addFilter}
+                  disabled={
+                    !filterField ||
+                    (filterOperator !== "isnull" &&
+                      filterOperator !== "notnull" &&
+                      !filterValue.trim())
+                  }
+                />
+              </div>
+
+              {Object.entries(filters).length > 0 && (
+                <div className="olap-filter-list">
+                  <div className="flex align-items-center justify-content-between mb-2">
+                    <span className="font-medium">
+                      {Object.keys(filters).length} active filters
+                    </span>
+                    <Button
+                      label="Clear all"
+                      icon="pi pi-trash"
+                      text
+                      size="small"
+                      onClick={() => setFilters({})}
+                    />
+                  </div>
+                  <div className="olap-scroll-selection">
                     {Object.entries(filters).map(([key, value]) => (
-                      <span key={key} className="inline-flex align-items-center gap-1">
-                        <Tag
-                          value={
-                            value ? `${key} = ${value}` : key
-                          }
-                        />
+                      <div key={key} className="olap-filter-item">
+                        <span>
+                          <b>{key}</b>
+                          {value && <> = {value}</>}
+                        </span>
                         <Button
                           icon="pi pi-times"
                           text
                           rounded
+                          size="small"
                           severity="secondary"
                           aria-label={`Remove filter ${key}`}
                           onClick={() => removeFilter(key)}
                         />
-                      </span>
+                      </div>
                     ))}
                   </div>
-                )}
-
-                <div className="olap-query-row">
-                  <label>
-                    Order by
-                    <Dropdown
-                      value={orderBy}
-                      options={options(measures)}
-                      onChange={(event) =>
-                        setOrderBy((event.value as string | null) ?? "")
-                      }
-                      placeholder="Measure"
-                      showClear
-                      className="field-control"
-                    />
-                  </label>
-
-                  <label>
-                    Limit
-                    <InputNumber
-                      value={limit}
-                      onValueChange={(event) => {
-                        const value = event.value ?? 100;
-                        setLimit(Math.min(1000, Math.max(1, value)));
-                      }}
-                      min={1}
-                      max={1000}
-                    />
-                  </label>
-
-                  <label>
-                    Pivot
-                    <Dropdown
-                      value={pivotDimension}
-                      options={options(dimensions)}
-                      onChange={(event) =>
-                        setPivotDimension(
-                          (event.value as string | null) ?? ""
-                        )
-                      }
-                      placeholder="Optional"
-                      showClear
-                      className="field-control"
-                    />
-                  </label>
                 </div>
+              )}
+            </Card>
+
+            <Card title="5. Query options">
+              <div className="olap-options-grid">
+                <label>
+                  Order by
+                  <Dropdown
+                    value={orderBy}
+                    options={options(measures)}
+                    onChange={(event) =>
+                      setOrderBy((event.value as string | null) ?? "")
+                    }
+                    placeholder="Measure"
+                    showClear
+                    className="field-control"
+                  />
+                </label>
+
+                <label>
+                  Limit
+                  <InputNumber
+                    value={limit}
+                    onValueChange={(event) => {
+                      const value = event.value ?? 100;
+                      setLimit(Math.min(1000, Math.max(1, value)));
+                    }}
+                    min={1}
+                    max={1000}
+                  />
+                </label>
+
+                <label>
+                  Pivot dimension
+                  <Dropdown
+                    value={pivotDimension}
+                    options={options(dimensions)}
+                    onChange={(event) =>
+                      setPivotDimension((event.value as string | null) ?? "")
+                    }
+                    placeholder="None"
+                    showClear
+                    className="field-control"
+                  />
+                </label>
 
                 <div className="olap-options">
                   <div>
@@ -535,7 +623,6 @@ export function OlapPage() {
                     />
                     <label htmlFor="olap-totals">Grand totals</label>
                   </div>
-
                   <div>
                     <Checkbox
                       inputId="olap-rollup"
@@ -547,10 +634,24 @@ export function OlapPage() {
                     <label htmlFor="olap-rollup">Rollup rows</label>
                   </div>
                 </div>
+              </div>
+            </Card>
 
+            <Card className="olap-run-card">
+              <div className="flex align-items-center justify-content-between gap-3 flex-wrap">
+                <div>
+                  <div className="font-semibold">
+                    {dimensions.length} dimensions · {measures.length} measures ·{" "}
+                    {Object.keys(filters).length} filters
+                  </div>
+                  <small className="text-500">
+                    Large selections stay inside bounded scroll areas.
+                  </small>
+                </div>
                 <Button
                   label="Run Cube Query"
                   icon="pi pi-play"
+                  size="large"
                   onClick={runQuery}
                   disabled={
                     !cube ||
@@ -560,59 +661,20 @@ export function OlapPage() {
                 />
               </div>
             </Card>
-
-            <Card title="Cube Schema">
-              {cube ? (
-                <div className="olap-schema">
-                  <div>
-                    <b>Entity</b>
-                    <span>{cube.entity}</span>
-                  </div>
-                  <div>
-                    <b>Resource</b>
-                    <span>{cube.resource}</span>
-                  </div>
-                  <div>
-                    <b>Relationships</b>
-                    <span>
-                      {cube.relationships.join(", ") || "None"}
-                    </span>
-                  </div>
-                  <div>
-                    <b>Dimensions</b>
-                    <span>{cube.dimensions.length}</span>
-                  </div>
-                  <div>
-                    <b>Measures</b>
-                    <span>{cube.measures.join(", ") || "None"}</span>
-                  </div>
-                </div>
-              ) : (
-                <p>Select a cube to inspect its generated schema.</p>
-              )}
-            </Card>
           </div>
 
           {queryError && (
-            <Message
-              severity="error"
-              text={queryError}
-              style={{ marginTop: "1rem" }}
-            />
+            <Message severity="error" text={queryError} className="mt-3" />
           )}
 
           {result && (
-            <Card title="Query Result">
+            <Card title="Query Result" className="mt-3">
               <div className="olap-result-meta">
                 <span>{rows.length} rows</span>
                 {result.grandTotal && (
-                  <Tag
-                    value="Grand total included"
-                    severity="success"
-                  />
+                  <Tag value="Grand total included" severity="success" />
                 )}
               </div>
-
               {rows.length > 0 ? (
                 <DataTable
                   value={rows}
@@ -623,214 +685,212 @@ export function OlapPage() {
                   stripedRows
                 >
                   {columns.map((column) => (
-                    <Column
-                      key={column}
-                      field={column}
-                      header={column}
-                      sortable
-                    />
+                    <Column key={column} field={column} header={column} sortable />
                   ))}
                 </DataTable>
               ) : (
-                <Message
-                  severity="info"
-                  text="The query returned no rows."
-                />
+                <Message severity="info" text="The query returned no rows." />
               )}
             </Card>
           )}
         </TabPanel>
 
         <TabPanel header="Cube Catalog" leftIcon="pi pi-th-large">
-          <DataTable
-            value={cubes}
-            paginator
-            rows={15}
-            stripedRows
-            responsiveLayout="scroll"
-          >
-            <Column field="name" header="Cube" sortable />
-            <Column field="module" header="Module" sortable />
-            <Column field="entity" header="Entity" sortable />
-            <Column
-              field="dimensions"
-              header="Dimensions"
-              body={(row: AutoOlapCube) => row.dimensions.length}
-            />
-            <Column
-              field="measures"
-              header="Measures"
-              body={(row: AutoOlapCube) => row.measures.length}
-            />
-            <Column
-              field="relationships"
-              header="Relationships"
-              body={(row: AutoOlapCube) => row.relationships.length}
-            />
-          </DataTable>
+          <Card title={`${cubes.length} available cubes`}>
+            <DataTable
+              value={cubes}
+              paginator
+              rows={15}
+              stripedRows
+              responsiveLayout="scroll"
+            >
+              <Column field="name" header="Cube" sortable />
+              <Column field="module" header="Module" sortable />
+              <Column field="entity" header="Entity" sortable />
+              <Column
+                field="dimensions"
+                header="Dimensions"
+                body={(row: AutoOlapCube) => row.dimensions.length}
+              />
+              <Column
+                field="measures"
+                header="Measures"
+                body={(row: AutoOlapCube) => row.measures.length}
+              />
+              <Column
+                field="relationships"
+                header="Relationships"
+                body={(row: AutoOlapCube) => row.relationships.length}
+              />
+            </DataTable>
+          </Card>
         </TabPanel>
 
         <TabPanel header="Auto Reports" leftIcon="pi pi-chart-bar">
-          <Card title="Report from JPA relationships">
-            <p className="olap-help">
-              Build a report from discovered JPA relationship paths.
-              Select a fact cube, inspect its relationships, then choose
-              the dimensions and measure for the report.
-            </p>
+          <div className="olap-workspace">
+            <Card title="1. Report source">
+              <div className="olap-options-grid">
+                <label>
+                  Fact cube
+                  <Dropdown
+                    value={cubeName}
+                    options={options(cubes.map((item) => item.name))}
+                    onChange={(event) =>
+                      selectCube(event.value as string | null)
+                    }
+                    placeholder="Select a fact cube"
+                    filter
+                    showClear
+                    className="field-control"
+                  />
+                </label>
 
-            <div className="olap-query-row">
-              <label>
-                Fact cube
-                <Dropdown
-                  value={cubeName}
-                  options={options(cubes.map((item) => item.name))}
-                  onChange={(event) =>
-                    selectCube(event.value as string | null)
-                  }
-                  placeholder="Select a fact entity"
-                  filter
-                  showClear
-                  className="field-control"
-                />
-              </label>
+                <label>
+                  Discovery depth
+                  <InputNumber
+                    value={reportDepth}
+                    onValueChange={(event) => {
+                      const value = event.value ?? 2;
+                      setReportDepth(Math.min(6, Math.max(1, value)));
+                    }}
+                    min={1}
+                    max={6}
+                  />
+                </label>
+              </div>
 
-              <label>
-                JPA relationships
-                <MultiSelect
-                  value={reportRelations}
-                  options={options(cube?.relationships ?? [])}
-                  onChange={(event) => {
-                    setReportRelations(
-                      (event.value ?? []) as string[]
-                    );
-                    setReportDimensions([]);
-                    setReportResult(null);
-                    setReportError("");
-                  }}
-                  placeholder="Customer / Product / Order"
-                  display="comma"
-                  maxSelectedLabels={1}
-                  selectedItemsLabel="{0} relationships selected"
-                  filter
-                  virtualScrollerOptions={{ itemSize: 40 }}
-                  panelClassName="olap-field-selector-panel"
-                  className="field-control"
-                />
-              </label>
+              {cube && (
+                <div className="olap-cube-info">
+                  <span>
+                    <b>{cube.entity}</b> · {cube.module}
+                  </span>
+                  <span>
+                    {cube.relationships.length} relationships available
+                  </span>
+                </div>
+              )}
+            </Card>
 
-              <label>
-                Discovery depth
-                <InputNumber
-                  value={reportDepth}
-                  onValueChange={(event) => {
-                    const value = event.value ?? 2;
-                    setReportDepth(Math.min(6, Math.max(1, value)));
-                  }}
-                  min={1}
-                  max={6}
-                />
-              </label>
+            <div className="olap-builder-grid">
+              <Card title="2. Relationships">
+                {cube ? (
+                  <FieldSelector
+                    value={reportRelations}
+                    optionValues={cube.relationships}
+                    placeholder="Search relationships"
+                    summaryLabel="relationships"
+                    onChange={(values) => {
+                      setReportRelations(values);
+                      setReportDimensions([]);
+                      setReportResult(null);
+                      setReportError("");
+                    }}
+                    onClear={() => {
+                      setReportRelations([]);
+                      setReportDimensions([]);
+                    }}
+                  />
+                ) : (
+                  <p className="text-500">Select a fact cube first.</p>
+                )}
+              </Card>
+
+              <Card title="3. Report dimensions">
+                {cube ? (
+                  <FieldSelector
+                    value={reportDimensions}
+                    optionValues={reportDimensionOptions}
+                    placeholder="Search report dimensions"
+                    summaryLabel="dimensions"
+                    onChange={setReportDimensions}
+                    onClear={() => setReportDimensions([])}
+                  />
+                ) : (
+                  <p className="text-500">Select a fact cube first.</p>
+                )}
+              </Card>
             </div>
 
             {relationQueries.isPending && (
-              <ProgressSpinner
-                style={{ width: "24px", height: "24px" }}
-              />
-            )}
-
-            {relationQueries.isError && (
-              <Message
-                severity="error"
-                text={errorMessage(relationQueries.error)}
-              />
-            )}
-
-            {cube && (
-              <label>
-                Report dimensions
-                <MultiSelect
-                  value={reportDimensions}
-                  options={reportDimensionOptions}
-                  onChange={(event) =>
-                    setReportDimensions(
-                      (event.value ?? []) as string[]
-                    )
-                  }
-                  placeholder="Select customer/product fields"
-                  display="comma"
-                  maxSelectedLabels={1}
-                  selectedItemsLabel="{0} dimensions selected"
-                  filter
-                  virtualScrollerOptions={{ itemSize: 40 }}
-                  panelClassName="olap-field-selector-panel"
-                  className="field-control"
-                />
-              </label>
-            )}
-
-            {relationQueries.data && relationQueries.data.length > 0 && (
-              <div className="olap-schema">
-                {relationQueries.data.map((discovery) => (
-                  <div key={discovery.relation}>
-                    <b>{discovery.relation}</b>
-                    <span>
-                      {discovery.paths.length > 0
-                        ? discovery.paths
-                            .map(
-                              (path) =>
-                                `${path.path} → ${path.targetEntity}`
-                            )
-                            .join(", ")
-                        : "No paths discovered"}
-                    </span>
-                  </div>
-                ))}
+              <div className="flex justify-content-center p-3">
+                <ProgressSpinner style={{ width: "28px", height: "28px" }} />
               </div>
             )}
 
-            {reportError && (
-              <Message severity="error" text={reportError} />
+            {relationQueries.isError && (
+              <Message severity="error" text={errorMessage(relationQueries.error)} />
             )}
 
-            <div className="olap-query-row">
-              <label>
-                Report name
-                <InputText
-                  value={reportName}
-                  onChange={(event) =>
-                    setReportName(event.target.value)
-                  }
-                  placeholder="Income per product by customer"
-                />
-              </label>
+            {relationQueries.data && relationQueries.data.length > 0 && (
+              <Card title="Discovered relationship paths">
+                <div className="olap-scroll-selection">
+                  {relationQueries.data.map((discovery) => (
+                    <div key={discovery.relation} className="olap-relation-item">
+                      <b>{discovery.relation}</b>
+                      <span>
+                        {discovery.paths.length > 0
+                          ? discovery.paths
+                              .map(
+                                (path) =>
+                                  `${path.path} → ${path.targetEntity}`
+                              )
+                              .join(", ")
+                          : "No paths discovered"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
-              <label>
-                Measure
-                <Dropdown
-                  value={reportMeasure}
-                  options={measureOptions}
-                  onChange={(event) =>
-                    setReportMeasure(
-                      (event.value as string | null) ?? ""
-                    )
-                  }
-                  placeholder="Select a measure"
-                  className="field-control"
-                />
-              </label>
+            <Card title="4. Report output">
+              <div className="olap-options-grid">
+                <label>
+                  Report name
+                  <InputText
+                    value={reportName}
+                    onChange={(event) => setReportName(event.target.value)}
+                    placeholder="Income per product by customer"
+                  />
+                </label>
 
-              <Button
-                label="Generate Report"
-                icon="pi pi-chart-bar"
-                onClick={generateReport}
-                disabled={
-                  !cube ||
-                  reportDimensions.length === 0 ||
-                  !reportMeasure
-                }
-              />
-            </div>
-          </Card>
+                <label>
+                  Measure
+                  <Dropdown
+                    value={reportMeasure}
+                    options={options(measureOptions)}
+                    onChange={(event) =>
+                      setReportMeasure((event.value as string | null) ?? "")
+                    }
+                    placeholder="Select a measure"
+                    filter
+                    className="field-control"
+                  />
+                </label>
+              </div>
+
+              <div className="flex align-items-center justify-content-between gap-3 flex-wrap mt-3">
+                <div className="font-semibold">
+                  {reportDimensions.length} dimensions selected
+                </div>
+                <Button
+                  label="Generate Report"
+                  icon="pi pi-chart-bar"
+                  size="large"
+                  onClick={generateReport}
+                  disabled={
+                    !cube ||
+                    reportDimensions.length === 0 ||
+                    !reportMeasure
+                  }
+                />
+              </div>
+            </Card>
+          </div>
+
+          {reportError && (
+            <Message severity="error" text={reportError} className="mt-3" />
+          )}
 
           {reportResult && (
             <Card
@@ -838,12 +898,12 @@ export function OlapPage() {
                 reportName.trim() ||
                 (cube ? `${cube.entity} report` : "OLAP report")
               }
+              className="mt-3"
             >
               <div className="olap-result-meta">
                 <span>{reportRows.length} rows</span>
                 <Tag value={reportMeasure} />
               </div>
-
               {reportRows.length > 0 ? (
                 <DataTable
                   value={reportRows}
@@ -854,12 +914,7 @@ export function OlapPage() {
                   stripedRows
                 >
                   {reportColumns.map((column) => (
-                    <Column
-                      key={column}
-                      field={column}
-                      header={column}
-                      sortable
-                    />
+                    <Column key={column} field={column} header={column} sortable />
                   ))}
                 </DataTable>
               ) : (
@@ -872,6 +927,6 @@ export function OlapPage() {
           )}
         </TabPanel>
       </TabView>
-    </>
+    </div>
   );
 }
