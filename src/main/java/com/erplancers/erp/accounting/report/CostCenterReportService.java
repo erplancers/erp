@@ -8,11 +8,15 @@ import com.erplancers.erp.accounting.report.dto.CostCenterReport;
 import com.erplancers.erp.accounting.repository.CostCenterRepository;
 import com.erplancers.erp.accounting.repository.JournalEntryLineRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+@Service
+@Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class CostCenterReportService {
     final JournalEntryLineRepository journalEntryLineRepository;
