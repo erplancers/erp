@@ -2,6 +2,10 @@ package com.erplancers.erp.common.service;
 
 import com.erplancers.erp.common.domain.EntityBase;
 import com.erplancers.erp.common.web.CrudRegistry;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import org.springframework.beans.BeanWrapper;
 import org.springframework.beans.BeanWrapperImpl;
 import org.springframework.core.convert.support.DefaultConversionService;
@@ -11,11 +15,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.beans.Introspector;
+import java.lang.reflect.*;
 import java.time.temporal.Temporal;
-import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class DynamicCrudService {
@@ -29,16 +32,13 @@ public class DynamicCrudService {
     @Transactional(readOnly = true)
     public Page<Map<String, Object>> list(String slug, int page, int size) {
         CrudRegistry.CrudDescriptor descriptor = registry.get(slug);
-        return descriptor.repository().findAll(PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100)))
-                .map(this::row);
+        return descriptor.repository().findAll(PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100))).map(this::row);
     }
 
     @Transactional(readOnly = true)
     public Map<String, Object> get(String slug, Long id) {
         var optional = registry.get(slug).repository().findById(id);
-        if (optional.isEmpty()) {
-            throw new IllegalArgumentException("Resource not found: " + id);
-        }
+        if (optional.isEmpty()) throw new IllegalArgumentException("Resource not found: " + id);
         return row(optional.get());
     }
 
@@ -54,21 +54,54 @@ public class DynamicCrudService {
             }
         } else {
             var optional = descriptor.repository().findById(id);
-            if (optional.isEmpty()) {
-                throw new IllegalArgumentException("Resource not found: " + id);
-            }
+            if (optional.isEmpty()) throw new IllegalArgumentException("Resource not found: " + id);
             entity = (EntityBase) optional.get();
         }
 
         BeanWrapper wrapper = new BeanWrapperImpl(entity);
-        values.forEach((name, value) -> {
+        Map<String, String> scalarValues = values.entrySet().stream()
+                .filter(e -> !e.getKey().startsWith("ref.") && !e.getKey().startsWith("collection."))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> b, LinkedHashMap::new));
+
+        scalarValues.forEach((name, value) -> {
             if (!wrapper.isWritableProperty(name) || value == null || value.isBlank()) return;
             Class<?> propertyType = wrapper.getPropertyType(name);
             if (propertyType == null || !isSimple(propertyType)) return;
             Object converted = conversionService.convert(value, propertyType);
             if (converted != null) wrapper.setPropertyValue(name, converted);
         });
+
+        applyReferences(wrapper, descriptor.entityType(), values);
         return (EntityBase) descriptor.repository().save(entity);
+    }
+
+    private void applyReferences(BeanWrapper wrapper, Class<?> entityType, Map<String, String> values) {
+        for (PropertyDescriptor property : properties(entityType)) {
+            String key = "ref." + property.getName();
+            String rawId = values.get(key);
+            if (rawId == null || rawId.isBlank() || !wrapper.isWritableProperty(property.getName())) continue;
+            Class<?> target = property.getPropertyType();
+            if (target == null || !EntityBase.class.isAssignableFrom(target)) continue;
+            CrudRegistry.CrudDescriptor targetDescriptor = findByEntityType(target);
+            Object reference = targetDescriptor.repository().findById(Long.valueOf(rawId))
+                    .orElseThrow(() -> new IllegalArgumentException("Related " + target.getSimpleName() + " not found: " + rawId));
+            wrapper.setPropertyValue(property.getName(), reference);
+        }
+
+        for (PropertyDescriptor property : properties(entityType)) {
+            String key = "collection." + property.getName();
+            String rawIds = values.get(key);
+            if (rawIds == null || !wrapper.isWritableProperty(property.getName())) continue;
+            Class<?> elementType = collectionElementType(property);
+            if (elementType == null || !EntityBase.class.isAssignableFrom(elementType)) continue;
+            CrudRegistry.CrudDescriptor targetDescriptor = findByEntityType(elementType);
+            Collection<Object> related = Arrays.stream(rawIds.split(","))
+                    .map(String::trim).filter(s -> !s.isBlank()).map(Long::valueOf)
+                    .map(id -> targetDescriptor.repository().findById(id)
+                            .orElseThrow(() -> new IllegalArgumentException("Related " + elementType.getSimpleName() + " not found: " + id)))
+                    .collect(Collectors.toCollection(ArrayList::new));
+            wrapper.setPropertyValue(property.getName(), related);
+        }
     }
 
     @Transactional
@@ -76,19 +109,95 @@ public class DynamicCrudService {
         registry.get(slug).repository().deleteById(id);
     }
 
-    public Map<String, String> metadata(String slug) {
+    @Transactional(readOnly = true)
+    public Map<String, Object> formMetadata(String slug, Long id) {
         CrudRegistry.CrudDescriptor descriptor = registry.get(slug);
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("fields", scalarMetadata(descriptor.entityType()));
+        metadata.put("references", referenceMetadata(descriptor.entityType()));
+        metadata.put("collections", collectionMetadata(descriptor.entityType()));
+        metadata.put("options", relationshipOptions(descriptor.entityType()));
+        metadata.put("values", id == null ? Map.of() : get(slug, id));
+        return metadata;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<String, Long> counts() {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        registry.all().values().forEach(d -> counts.put(d.slug(), d.repository().count()));
+        return counts;
+    }
+
+    private Map<String, String> scalarMetadata(Class<?> type) {
         Map<String, String> fields = new LinkedHashMap<>();
-        try {
-            for (var property : Introspector.getBeanInfo(descriptor.entityType()).getPropertyDescriptors()) {
-                if ("class".equals(property.getName()) || property.getReadMethod() == null || property.getWriteMethod() == null) continue;
-                Class<?> type = property.getPropertyType();
-                if (type != null && isSimple(type)) fields.put(property.getName(), type.getSimpleName());
-            }
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot inspect " + descriptor.entityType().getName(), e);
+        for (PropertyDescriptor p : properties(type)) {
+            if (isSimple(p.getPropertyType()) && p.getWriteMethod() != null) fields.put(p.getName(), p.getPropertyType().getSimpleName());
         }
         return fields;
+    }
+
+    private List<Map<String, String>> referenceMetadata(Class<?> type) {
+        List<Map<String, String>> result = new ArrayList<>();
+        for (PropertyDescriptor p : properties(type)) {
+            if (!isReference(p) || p.getWriteMethod() == null) continue;
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("name", p.getName());
+            row.put("type", p.getPropertyType().getSimpleName());
+            row.put("slug", findByEntityType(p.getPropertyType()).slug());
+            result.add(row);
+        }
+        return result;
+    }
+
+    private List<Map<String, String>> collectionMetadata(Class<?> type) {
+        List<Map<String, String>> result = new ArrayList<>();
+        for (PropertyDescriptor p : properties(type)) {
+            if (!isCollection(p) || p.getWriteMethod() == null) continue;
+            Class<?> elementType = collectionElementType(p);
+            if (elementType == null || !EntityBase.class.isAssignableFrom(elementType)) continue;
+            Map<String, String> row = new LinkedHashMap<>();
+            row.put("name", p.getName());
+            row.put("type", elementType.getSimpleName());
+            row.put("slug", findByEntityType(elementType).slug());
+            result.add(row);
+        }
+        return result;
+    }
+
+    private Map<String, List<Map<String, Object>>> relationshipOptions(Class<?> type) {
+        Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
+        for (PropertyDescriptor p : properties(type)) {
+            Class<?> target = isReference(p) ? p.getPropertyType() : collectionElementType(p);
+            if (target == null || !EntityBase.class.isAssignableFrom(target)) continue;
+            CrudRegistry.CrudDescriptor d = findByEntityType(target);
+            List<Map<String, Object>> options = new ArrayList<>();
+            d.repository().findAll(PageRequest.of(0, 100)).forEach(entity -> {
+                Map<String, Object> option = new LinkedHashMap<>();
+                option.put("id", entity.getId());
+                option.put("label", displayLabel(entity));
+                options.add(option);
+            });
+            result.put(p.getName(), options);
+        }
+        return result;
+    }
+
+    private CrudRegistry.CrudDescriptor findByEntityType(Class<?> type) {
+        return registry.all().values().stream()
+                .filter(d -> d.entityType().equals(type))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No repository registered for " + type.getName()));
+    }
+
+    private String displayLabel(Object entity) {
+        BeanWrapper wrapper = new BeanWrapperImpl(entity);
+        for (String name : List.of("name", "code", "title", "number", "email", "description")) {
+            if (wrapper.isReadableProperty(name)) {
+                Object value = wrapper.getPropertyValue(name);
+                if (value != null && !value.toString().isBlank()) return entity.getClass().getSimpleName() + " · " + value;
+            }
+        }
+        return entity.getClass().getSimpleName() + " #" + ((EntityBase) entity).getId();
     }
 
     private Map<String, Object> row(Object entity) {
@@ -98,18 +207,45 @@ public class DynamicCrudService {
             if ("class".equals(property.getName()) || property.getReadMethod() == null) continue;
             Class<?> type = property.getPropertyType();
             if (type != null && isSimple(type)) {
-                try {
-                    row.put(property.getName(), wrapper.getPropertyValue(property.getName()));
-                } catch (RuntimeException ignored) {
-                }
+                try { row.put(property.getName(), wrapper.getPropertyValue(property.getName())); } catch (RuntimeException ignored) {}
             }
         }
         return row;
     }
 
+    private List<PropertyDescriptor> properties(Class<?> type) {
+        try {
+            return Arrays.asList(Introspector.getBeanInfo(type).getPropertyDescriptors());
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot inspect " + type.getName(), e);
+        }
+    }
+
+    private boolean isReference(PropertyDescriptor p) {
+        return p.getPropertyType() != null && (p.getReadMethod().isAnnotationPresent(ManyToOne.class)
+                || p.getReadMethod().isAnnotationPresent(OneToOne.class)
+                || p.getWriteMethod().isAnnotationPresent(ManyToOne.class)
+                || p.getWriteMethod().isAnnotationPresent(OneToOne.class))
+                && EntityBase.class.isAssignableFrom(p.getPropertyType());
+    }
+
+    private boolean isCollection(PropertyDescriptor p) {
+        return Collection.class.isAssignableFrom(p.getPropertyType())
+                && (p.getReadMethod().isAnnotationPresent(OneToMany.class)
+                || p.getReadMethod().isAnnotationPresent(ManyToMany.class)
+                || p.getWriteMethod().isAnnotationPresent(OneToMany.class)
+                || p.getWriteMethod().isAnnotationPresent(ManyToMany.class));
+    }
+
+    private Class<?> collectionElementType(PropertyDescriptor p) {
+        Type type = p.getReadMethod().getGenericReturnType();
+        if (type instanceof ParameterizedType pt && pt.getActualTypeArguments()[0] instanceof Class<?> c) return c;
+        return null;
+    }
+
     private boolean isSimple(Class<?> type) {
-        return type.isPrimitive() || Number.class.isAssignableFrom(type) || CharSequence.class.isAssignableFrom(type)
+        return type != null && (type.isPrimitive() || Number.class.isAssignableFrom(type) || CharSequence.class.isAssignableFrom(type)
                 || Boolean.class == type || type.isEnum() || UUID.class == type || Date.class.isAssignableFrom(type)
-                || Temporal.class.isAssignableFrom(type);
+                || Temporal.class.isAssignableFrom(type));
     }
 }
