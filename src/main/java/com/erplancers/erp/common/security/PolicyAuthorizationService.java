@@ -18,11 +18,10 @@ public class PolicyAuthorizationService {
 
     public boolean isAllowed(Authentication authentication, String slug, String action) {
         if (authentication == null || !authentication.isAuthenticated()) return false;
-        CrudRegistry.CrudDescriptor descriptor;
-        try { descriptor = registry.get(slug); }
-        catch (IllegalArgumentException ex) { return false; }
+        CrudRegistry.CrudDescriptor descriptor = null;
+        try { descriptor = registry.get(slug); } catch (IllegalArgumentException ignored) {}
 
-        String module = descriptor.module();
+        String module = descriptor != null ? descriptor.module() : slug;
         String username = authentication.getName();
         ErpUser user = authentication.getPrincipal() instanceof ErpUser u ? u : null;
 
