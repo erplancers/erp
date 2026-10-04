@@ -99,7 +99,7 @@ export function OlapPage() {
     });
   }
 
-  function createAutoReport() {\n    if (!cube || reportDimensions.length === 0) return;\n    const finalName = reportName.trim() || cube.entity + " report";\n    setDimensions(reportDimensions);\n    setMeasures([reportMeasure]);\n    setReportName(finalName);\n    setResult(null);\n    setError("");\n  }\n\n  async function runQuery() {
+  async function createAutoReport() {\n    if (!cube || reportDimensions.length === 0) return;\n    const finalName = reportName.trim() || cube.entity + " report";\n    setDimensions(reportDimensions);\n    setMeasures([reportMeasure]);\n    setReportName(finalName);\n    setResult(null);\n    setError("");\n  }\n\n  async function runQuery() {
     if (!cubeName || !cube || measures.length === 0) return;
     try {
       setError("");
@@ -265,6 +265,8 @@ export function OlapPage() {
                 <InputNumber value={reportDepth} onValueChange={e => setReportDepth(e.value || 2)} min={1} max={6} />
               </label>
             </div>
+            {relationQueries.isPending && <ProgressSpinner style={{ width: "24px", height: "24px" }} />}
+            {relationQueries.isError && <Message severity="error" text={(relationQueries.error as Error).message} />}
             {cube && reportRelations.length > 0 && (
               <label>Report dimensions
                 <MultiSelect value={reportDimensions}
