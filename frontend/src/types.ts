@@ -12,3 +12,5 @@ export interface ModuleReport { [key:string]:unknown; }
 export interface OlapCatalog { [key:string]:unknown; }
 export interface AutoOlapCube { name:string; resource:string; module:string; entity:string; dimensions:string[]; measures:string[]; relationships:string[]; }
 export interface AutoOlapCatalog { cubeCount:number; cubes:AutoOlapCube[]; }
+export interface AutoOlapRelationPath { path:string; targetEntity:string; relationshipType:string; }
+export interface AutoOlapRelationDiscovery { resource:string; relation:string; paths:AutoOlapRelationPath[]; }
