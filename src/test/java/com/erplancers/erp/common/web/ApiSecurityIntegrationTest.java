@@ -1,5 +1,6 @@
 package com.erplancers.erp.common.web;
 
+import com.erplancers.erp.common.reporting.ErpBiEngine;
 import com.erplancers.erp.common.security.domain.ErpPolicy;
 import com.erplancers.erp.common.security.domain.ErpUser;
 import com.erplancers.erp.common.security.repository.ErpAccessRuleRepository;
@@ -27,6 +28,7 @@ class ApiSecurityIntegrationTest {
     @Autowired ErpUserRepository users;
     @Autowired ErpAccessRuleRepository policies;
     @Autowired PasswordEncoder passwordEncoder;
+    @Autowired ErpBiEngine bi;
 
     @BeforeEach
     void setUp() {
@@ -68,6 +70,23 @@ class ApiSecurityIntegrationTest {
     @Test void accountingCanReadAuthorizedResource() throws Exception {
         mvc.perform(get("/api/resources/account").with(httpBasic("accounting", "accounting-pass")))
                 .andExpect(status().isOk());
+    }
+
+    @Test void paymentTransactionBiEngineWorksDirectly() {
+        var report = bi.query(
+                "payment-transaction",
+                new ErpBiEngine.BiQuery(
+                        java.util.List.of("status"),
+                        java.util.List.of("count"),
+                        java.util.Map.of(),
+                        "count:desc",
+                        100,
+                        false,
+                        false,
+                        false));
+
+        assertThat(report.resource()).isEqualTo("payment-transaction");
+        assertThat(report.rows()).isNotNull();
     }
 
     @Test void adminCanGroupPaymentTransactionsByStatus() throws Exception {
