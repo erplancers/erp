@@ -18,7 +18,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -26,10 +26,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class AnalyticsOverloadMockMvcTest {
 
-    @Autowired MockMvc mvc;
-    @Autowired ErpUserRepository users;
-    @Autowired ErpAccessRuleRepository policies;
-    @Autowired PasswordEncoder passwordEncoder;
+    @Autowired
+    MockMvc mvc;
+
+    @Autowired
+    ErpUserRepository users;
+
+    @Autowired
+    ErpAccessRuleRepository policies;
+
+    @Autowired
+    PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
@@ -61,39 +68,18 @@ class AnalyticsOverloadMockMvcTest {
             final int workerId = worker;
             workers.add(() -> {
                 ready.countDown();
+
                 if (!start.await(30, TimeUnit.SECONDS)) {
                     throw new IllegalStateException("Load-test workers did not start");
                 }
 
                 for (int i = 0; i < requestsPerWorker; i++) {
-                    int endpoint = (workerId + i) % 5;
-
-                    switch (endpoint) {
-                        case 0 -> mvc.perform(get("/api/analytics/resources")
-                                        .with(httpBasic("load-admin", "load-pass")))
-                                .andExpect(status().isOk());
-                        case 1 -> mvc.perform(get("/api/analytics/catalog")
-                                        .with(httpBasic("load-admin", "load-pass")))
-                                .andExpect(status().isOk());
-                        case 2 -> mvc.perform(get("/api/analytics/dashboard")
-                                        .with(httpBasic("load-admin", "load-pass")))
-                                .andExpect(status().isOk());
-                        case 3 -> mvc.perform(get("/api/analytics/resources/invoice/aggregate")
-                                        .param("metrics", "count")
-                                        .param("limit", "25")
-                                        .with(httpBasic("load-admin", "load-pass")))
-                                .andExpect(status().isOk());
-                        case 4 -> mvc.perform(get("/api/analytics/resources/invoice/profile")
-                                        .param("topValues", "5")
-                                        .with(httpBasic("load-admin", "load-pass")))
-                                .andExpect(status().isOk());
-                        default -> throw new AssertionError();
-                    }
-
+                    performEndpoint((workerId + i) % 5);
                     successful.incrementAndGet();
                 }
+
                 return null;
-            };
+            });
         }
 
         try {
@@ -109,16 +95,46 @@ class AnalyticsOverloadMockMvcTest {
                 future.get();
             }
 
-            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+            long elapsedMillis =
+                    TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
 
             if (successful.get() != expectedRequests) {
                 throw new AssertionError(String.format(
                         "Expected %d successful requests but got %d in %d ms",
-                        expectedRequests, successful.get(), elapsedMillis));
+                        expectedRequests,
+                        successful.get(),
+                        elapsedMillis));
             }
         } finally {
             executor.shutdownNow();
             executor.awaitTermination(10, TimeUnit.SECONDS);
+        }
+    }
+
+    private void performEndpoint(int endpoint) throws Exception {
+        if (endpoint == 0) {
+            mvc.perform(get("/api/analytics/resources")
+                            .with(httpBasic("load-admin", "load-pass")))
+                    .andExpect(status().isOk());
+        } else if (endpoint == 1) {
+            mvc.perform(get("/api/analytics/catalog")
+                            .with(httpBasic("load-admin", "load-pass")))
+                    .andExpect(status().isOk());
+        } else if (endpoint == 2) {
+            mvc.perform(get("/api/analytics/dashboard")
+                            .with(httpBasic("load-admin", "load-pass")))
+                    .andExpect(status().isOk());
+        } else if (endpoint == 3) {
+            mvc.perform(get("/api/analytics/resources/invoice/aggregate")
+                            .param("metrics", "count")
+                            .param("limit", "25")
+                            .with(httpBasic("load-admin", "load-pass")))
+                    .andExpect(status().isOk());
+        } else {
+            mvc.perform(get("/api/analytics/resources/invoice/profile")
+                            .param("topValues", "5")
+                            .with(httpBasic("load-admin", "load-pass")))
+                    .andExpect(status().isOk());
         }
     }
 }
