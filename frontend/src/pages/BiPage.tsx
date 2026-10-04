@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useParams } from "react-router-dom";
 import { Card } from "primereact/card";
 import { Dropdown } from "primereact/dropdown";
 import { MultiSelect } from "primereact/multiselect";
@@ -17,23 +18,26 @@ export function BiPage() {
   const { credentials } = useAuth();
   const [dimension, setDimension] = useState("");
   const [measures, setMeasures] = useState<string[]>(["count"]);
-  const [run, setRun] = useState(0);
   const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: () => api.catalog(credentials!), enabled: !!credentials });
   const schema = catalog.data?.resources.find(r => r.slug === slug);
   const options = useMemo(() => schema?.fields.filter(f => !["id","version"].includes(f.name)) ?? [], [schema]);
 
   async function execute() {
     if (!dimension) return;
-    const response = await api.biQuery(slug, {
-      dimensions: [dimension],
-      measures,
-      filters: {},
-      orderBy: measures[0] ? `${measures[0]}:desc` : "",
-      limit: 100
-    }, credentials!);
-    setResult(response);
-    setRun(x => x + 1);
+    setLoading(true);
+    try {
+      setResult(await api.biQuery(slug, {
+        dimensions: [dimension],
+        measures,
+        filters: {},
+        orderBy: measures[0] ? `${measures[0]}:desc` : "",
+        limit: 100
+      }, credentials!));
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (catalog.isPending) return <ProgressSpinner />;
@@ -41,8 +45,8 @@ export function BiPage() {
 
   const rows = result?.rows ?? [];
   const chartData = result ? {
-    labels: rows.slice(0, 12).map((r: any) => String(r[dimension] ?? "Unknown")),
-    datasets: [{ label: measures[0], data: rows.slice(0, 12).map((r: any) => Number(r[measures[0]] ?? 0)) }]
+    labels: rows.slice(0, 12).map((r: Record<string, unknown>) => String(r[dimension] ?? "Unknown")),
+    datasets: [{ label: measures[0], data: rows.slice(0, 12).map((r: Record<string, unknown>) => Number(r[measures[0]] ?? 0)) }]
   } : undefined;
 
   return <>
@@ -50,8 +54,8 @@ export function BiPage() {
     <Card className="bi-toolbar">
       <label>Dimension<Dropdown value={dimension} options={options} optionLabel="name" optionValue="name" onChange={e=>setDimension(e.value)} placeholder="Select dimension" /></label>
       <label>Measures<MultiSelect value={measures} options={["count", ...options.filter(o=>/Number|BigDecimal|Long|Integer|Double|Float/.test(o.javaType)).map(o=>`sum:${o.name}`)]} onChange={e=>setMeasures(e.value)} /></label>
-      <Button label="Run analysis" icon="pi pi-play" onClick={execute} disabled={!dimension} loading={run<0} />
+      <Button label="Run analysis" icon="pi pi-play" onClick={execute} disabled={!dimension} loading={loading} />
     </Card>
-    {result && <div className="bi-grid"><Card title="Trend / distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{measures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
+    {result && <div className="bi-grid"><Card title="Distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{measures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
   </>;
 }
