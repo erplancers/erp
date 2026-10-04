@@ -1,0 +1,7 @@
+@param com.erplancers.erp.accounting.report.dto.GeneralLedgerReport report
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ERP | General ledger</title><link rel="stylesheet" href="/webjars/bootstrap/5.3.8/css/bootstrap.min.css"></head>
+<body class="bg-body-tertiary"><nav class="navbar bg-white border-bottom"><div class="container-fluid px-4"><a class="navbar-brand" href="/app/accounting/reports">Accounting Reports</a></div></nav>
+<main class="container-fluid px-4 py-4"><div class="d-flex justify-content-between align-items-end mb-4"><div><div class="text-uppercase text-muted small">General ledger</div><h1 class="h2">@report.accountCode() · @report.accountName()</h1><div class="text-muted">@report.from() → @report.to()</div></div><a class="btn btn-outline-secondary" href="/app/accounting/reports/accounts/@report.accountId()">Account</a></div>
+<div class="card border-0 shadow-sm"><div class="table-responsive"><table class="table table-striped table-hover mb-0"><thead><tr><th>Date</th><th>Entry</th><th>Description</th><th class="text-end">Debit</th><th class="text-end">Credit</th><th class="text-end">Balance</th></tr></thead><tbody>
+@for(var line : report.lines())<tr><td>@line.entryDate()</td><td>@line.entryId()</td><td>@line.description()</td><td class="text-end">@line.debit()</td><td class="text-end">@line.credit()</td><td class="text-end fw-semibold">@line.balance()</td></tr>@endfor
+</tbody></table></div></div></main></body></html>
