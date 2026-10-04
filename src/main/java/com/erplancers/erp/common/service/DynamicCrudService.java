@@ -84,8 +84,7 @@ public class DynamicCrudService {
             Class<?> target = property.getPropertyType();
             if (target == null || !EntityBase.class.isAssignableFrom(target)) continue;
             CrudRegistry.CrudDescriptor targetDescriptor = findByEntityType(target);
-            Object reference = targetDescriptor.repository().findById(Long.valueOf(rawId))
-                    .orElseThrow(() -> new IllegalArgumentException("Related " + target.getSimpleName() + " not found: " + rawId));
+            EntityBase reference = findRelated(targetDescriptor, Long.valueOf(rawId), target.getSimpleName());
             wrapper.setPropertyValue(property.getName(), reference);
         }
 
@@ -98,8 +97,7 @@ public class DynamicCrudService {
             CrudRegistry.CrudDescriptor targetDescriptor = findByEntityType(elementType);
             Collection<Object> related = Arrays.stream(rawIds.split(","))
                     .map(String::trim).filter(s -> !s.isBlank()).map(Long::valueOf)
-                    .map(id -> targetDescriptor.repository().findById(id)
-                            .orElseThrow(() -> new IllegalArgumentException("Related " + elementType.getSimpleName() + " not found: " + id)))
+                    .map(id -> findRelated(targetDescriptor, id, elementType.getSimpleName()))
                     .collect(Collectors.toCollection(ArrayList::new));
             wrapper.setPropertyValue(property.getName(), collectionValue(wrapper.getPropertyType(property.getName()), related));
         }
@@ -182,6 +180,14 @@ public class DynamicCrudService {
             result.put(p.getName(), options);
         }
         return result;
+    }
+
+    private EntityBase findRelated(CrudRegistry.CrudDescriptor descriptor, Long id, String typeName) {
+        Object found = descriptor.repository().findById(id).orElse(null);
+        if (!(found instanceof EntityBase entity)) {
+            throw new IllegalArgumentException("Related " + typeName + " not found: " + id);
+        }
+        return entity;
     }
 
     private Object collectionValue(Class<?> collectionType, Collection<Object> values) {
