@@ -46,6 +46,7 @@ export function LoginPage() {
         <Button label="Sign in" icon="pi pi-arrow-right" iconPos="right" type="submit" className="w-full" />
         <small>Use HTTPS in production. Credentials are retained only for the current browser session.</small>
         <Link to="/register">Create a new account</Link>
+        <Link to="/register-admin">Create administrator</Link>
       </form>
     </div>
   );
