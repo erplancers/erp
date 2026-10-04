@@ -25,17 +25,22 @@ export function BiPage() {
   const schema = catalog.data?.resources.find(r => r.slug === slug);
   const options = useMemo(() => schema?.fields.filter(f => !["id","version"].includes(f.name)) ?? [], [schema]);
 
+  const selectedMeasures = measures.length ? measures : ["count"];
+
   async function execute() {
-    if (!dimension) return;
+    if (!slug || !dimension || !credentials) return;
+    setError(null);
     setLoading(true);
     try {
       setResult(await api.biQuery(slug, {
         dimensions: [dimension],
         measures: selectedMeasures,
         filters: {},
-        orderBy: selectedMeasures[0] ? `${selectedMeasures[0]}:desc` : "count:desc",
+        orderBy: `${selectedMeasures[0]}:desc`,
         limit: 100
-      }, credentials!));
+      }, credentials));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "BI query failed");
     } finally {
       setLoading(false);
     }
@@ -47,7 +52,7 @@ export function BiPage() {
   const rows = result?.rows ?? [];
   const chartData = result ? {
     labels: rows.slice(0, 12).map((r: Record<string, unknown>) => String(r[dimension] ?? "Unknown")),
-    datasets: [{ label: measures[0], data: rows.slice(0, 12).map((r: Record<string, unknown>) => Number(r[measures[0]] ?? 0)) }]
+    datasets: [{ label: selectedMeasures[0], data: rows.slice(0, 12).map((r: Record<string, unknown>) => Number(r[selectedMeasures[0]] ?? 0)) }]
   } : undefined;
 
   return <>
@@ -57,6 +62,7 @@ export function BiPage() {
       <label>Measures<MultiSelect value={measures} options={["count", ...options.filter(o=>/Number|BigDecimal|Long|Integer|Double|Float/.test(o.javaType)).map(o=>`sum:${o.name}`)]} onChange={e=>setMeasures(e.value)} /></label>
       <Button label="Run analysis" icon="pi pi-play" onClick={execute} disabled={!dimension} loading={loading} />
     </Card>
-    {error && <Message severity="error" text={error} className="mb-3" />}\n    {result && <div className="bi-grid"><Card title="Distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{measures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
+    {error && <Message severity="error" text={error} className="mb-3" />}
+    {result && <div className="bi-grid"><Card title="Distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{selectedMeasures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
   </>;
 }
