@@ -115,7 +115,7 @@ public class ErpBiEngine {
 
         if (includeRank) {
             List<Map<String, Object>> ranked = rows.stream()
-                    .sorted(Comparator.comparingDouble(
+                    .sorted(Comparator.<Map<String, Object>>comparingDouble(
                             row -> numeric(row.get(measure))).reversed())
                     .toList();
 
