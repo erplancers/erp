@@ -1,7 +1,7 @@
 package com.erplancers.erp.common.web;
 
 import com.erplancers.erp.common.domain.EntityBase;
-import com.erplancers.erp.common.security.ErpAuthorizationService;
+import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import com.erplancers.erp.common.service.DynamicCrudService;
 import com.erplancers.erp.common.web.dto.CrudRequest;
 import com.erplancers.erp.common.web.dto.ResourceDto;
@@ -31,12 +31,12 @@ public class RestCrudController {
 
     private final CrudRegistry registry;
     private final DynamicCrudService service;
-    private final ErpAuthorizationService authorization;
+    private final PolicyAuthorizationService authorization;
 
     @GetMapping
     public Collection<Map<String, Object>> resources(Authentication authentication) {
         return registry.all().values().stream()
-                .filter(d -> authorization.canRead(authentication, d.slug()))
+                .filter(d -> authorization.isAllowed(authentication, d.slug(), "READ"))
                 .map(d -> {
                     Map<String, Object> resource = new LinkedHashMap<>();
                     resource.put("slug", d.slug());
@@ -140,19 +140,19 @@ public class RestCrudController {
     }
 
     private void requireRead(Authentication authentication, String slug) {
-        if (!authorization.canRead(authentication, slug)) {
+        if (!authorization.isAllowed(authentication, slug, "READ")) {
             throw new AccessDeniedException("Read access denied for ERP resource: " + slug);
         }
     }
 
     private void requireWrite(Authentication authentication, String slug) {
-        if (!authorization.canWrite(authentication, slug)) {
+        if (!authorization.isAllowed(authentication, slug, "WRITE")) {
             throw new AccessDeniedException("Write access denied for ERP resource: " + slug);
         }
     }
 
     private void requireDelete(Authentication authentication, String slug) {
-        if (!authorization.canDelete(authentication, slug)) {
+        if (!authorization.isAllowed(authentication, slug, "DELETE")) {
             throw new AccessDeniedException("Delete access denied for ERP resource: " + slug);
         }
     }
