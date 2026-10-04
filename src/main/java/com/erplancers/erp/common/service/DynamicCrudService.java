@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.time.temporal.Temporal;
 import java.util.*;
@@ -397,25 +398,40 @@ public class DynamicCrudService {
     }
 
     private boolean isReference(PropertyDescriptor p) {
-        return p.getPropertyType() != null && (p.getReadMethod().isAnnotationPresent(ManyToOne.class)
-                || p.getReadMethod().isAnnotationPresent(OneToOne.class)
-                || p.getWriteMethod().isAnnotationPresent(ManyToOne.class)
-                || p.getWriteMethod().isAnnotationPresent(OneToOne.class))
+        return p.getPropertyType() != null
+                && (hasAnnotation(p, ManyToOne.class) || hasAnnotation(p, OneToOne.class))
                 && EntityBase.class.isAssignableFrom(p.getPropertyType());
     }
 
     private boolean isNestedCollection(PropertyDescriptor p) {
         return Collection.class.isAssignableFrom(p.getPropertyType())
-                && (p.getReadMethod().isAnnotationPresent(OneToMany.class)
-                || p.getWriteMethod().isAnnotationPresent(OneToMany.class));
+                && hasAnnotation(p, OneToMany.class);
     }
 
     private boolean isCollection(PropertyDescriptor p) {
         return Collection.class.isAssignableFrom(p.getPropertyType())
-                && (p.getReadMethod().isAnnotationPresent(OneToMany.class)
-                || p.getReadMethod().isAnnotationPresent(ManyToMany.class)
-                || p.getWriteMethod().isAnnotationPresent(OneToMany.class)
-                || p.getWriteMethod().isAnnotationPresent(ManyToMany.class));
+                && (hasAnnotation(p, OneToMany.class) || hasAnnotation(p, ManyToMany.class));
+    }
+
+    private boolean hasAnnotation(PropertyDescriptor p, Class<? extends Annotation> annotationType) {
+        if (p.getReadMethod() != null && p.getReadMethod().isAnnotationPresent(annotationType)) return true;
+        if (p.getWriteMethod() != null && p.getWriteMethod().isAnnotationPresent(annotationType)) return true;
+        try {
+            Field field = p.getPropertyType() == null ? null : findField(p.getReadMethod().getDeclaringClass(), p.getName());
+            return field != null && field.isAnnotationPresent(annotationType);
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
+
+    private Field findField(Class<?> type, String name) {
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            try {
+                return current.getDeclaredField(name);
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        return null;
     }
 
     private Class<?> collectionElementType(PropertyDescriptor p) {
