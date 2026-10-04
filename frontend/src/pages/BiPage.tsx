@@ -20,6 +20,7 @@ export function BiPage() {
   const [measures, setMeasures] = useState<string[]>(["count"]);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: () => api.catalog(credentials!), enabled: !!credentials });
   const schema = catalog.data?.resources.find(r => r.slug === slug);
   const options = useMemo(() => schema?.fields.filter(f => !["id","version"].includes(f.name)) ?? [], [schema]);
@@ -30,9 +31,9 @@ export function BiPage() {
     try {
       setResult(await api.biQuery(slug, {
         dimensions: [dimension],
-        measures,
+        measures: selectedMeasures,
         filters: {},
-        orderBy: measures[0] ? `${measures[0]}:desc` : "",
+        orderBy: selectedMeasures[0] ? `${selectedMeasures[0]}:desc` : "count:desc",
         limit: 100
       }, credentials!));
     } finally {
@@ -56,6 +57,6 @@ export function BiPage() {
       <label>Measures<MultiSelect value={measures} options={["count", ...options.filter(o=>/Number|BigDecimal|Long|Integer|Double|Float/.test(o.javaType)).map(o=>`sum:${o.name}`)]} onChange={e=>setMeasures(e.value)} /></label>
       <Button label="Run analysis" icon="pi pi-play" onClick={execute} disabled={!dimension} loading={loading} />
     </Card>
-    {result && <div className="bi-grid"><Card title="Distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{measures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
+    {error && <Message severity="error" text={error} className="mb-3" />}\n    {result && <div className="bi-grid"><Card title="Distribution"><Chart type="bar" data={chartData} options={{responsive:true,plugins:{legend:{display:false}}}} /></Card><Card title="Result set"><DataTable value={rows} stripedRows paginator rows={15}><Column field={dimension} header={dimension}/>{measures.map(m=><Column key={m} field={m} header={m}/>)}</DataTable></Card></div>}
   </>;
 }
