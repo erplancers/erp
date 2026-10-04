@@ -1,6 +1,8 @@
 package com.erplancers.erp.common.security.web;
 
+import com.erplancers.erp.common.security.domain.ErpPolicy;
 import com.erplancers.erp.common.security.domain.ErpUser;
+import com.erplancers.erp.common.security.repository.ErpAccessRuleRepository;
 import com.erplancers.erp.common.security.repository.ErpUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.util.List;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,9 +29,11 @@ class RegistrationPersistenceIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ErpUserRepository users;
+    @Autowired private ErpAccessRuleRepository policies;
 
     @BeforeEach
     void setUp() {
+        policies.deleteAll();
         users.deleteAll();
     }
 
@@ -45,6 +51,13 @@ class RegistrationPersistenceIntegrationTest {
         assertEquals("USER", user.getLevel());
         assertTrue(user.getRoles().contains("USER"));
         assertNotEquals("password123", user.getPassword());
+
+        List<ErpPolicy> defaultPolicies = policies.findByRoleIn(List.of("USER"));
+        assertEquals(3, defaultPolicies.size());
+        assertTrue(defaultPolicies.stream().allMatch(p ->
+                "*".equals(p.getModule())
+                        && "*".equals(p.getResource())
+                        && p.getEffect() == ErpPolicy.PolicyEffect.ALLOW));
     }
 
     @Test
@@ -77,5 +90,6 @@ class RegistrationPersistenceIntegrationTest {
         ErpUser user = users.findByUsernameIgnoreCase("persisted-admin").orElseThrow();
         assertEquals("ADMIN", user.getLevel());
         assertTrue(user.getRoles().contains("ADMIN"));
+        assertTrue(policies.findByRoleIn(List.of("USER")).isEmpty());
     }
 }
