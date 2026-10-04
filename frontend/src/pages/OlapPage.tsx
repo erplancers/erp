@@ -435,8 +435,6 @@ export function OlapPage() {
                             ? `${key} = ${value}`
                             : key
                         }
-                        removable
-                        onRemove={() => removeFilter(key)}
                       />
                     ))}
                   </div>
@@ -722,7 +720,7 @@ export function OlapPage() {
               </label>
             )}
 
-            {relationQueries.data?.length > 0 && (
+            {relationQueries.data && relationQueries.data.length > 0 && (
               <div className="olap-schema">
                 {relationQueries.data.map((discovery) => (
                   <div key={discovery.relation}>
