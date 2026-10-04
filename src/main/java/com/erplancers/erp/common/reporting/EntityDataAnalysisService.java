@@ -131,7 +131,7 @@ public class EntityDataAnalysisService {
                         Class<?> elementType = plural.getElementType().getJavaType();
                         if (EntityBase.class.isAssignableFrom(elementType)) {
                             ManagedType<?> target = entityManager.getMetamodel().managedType(elementType);
-                            collectBiFields(target, name, depth + 1, new HashSet<>(visited), fields);
+                            collectBiFields(target, name, depth + 1, relationDepth, new HashSet<>(visited), fields);
                         }
                     }
                 });
