@@ -39,6 +39,17 @@ export async function apiFetch<T>(
 
 export const api = {
   resources: (c: Credentials) => apiFetch<ResourceInfo[]>("/analytics/resources", c),
+  registerAdmin: (body: { username: string; password: string; adminToken: string }) =>
+    fetch(API_BASE + "/auth/register-admin", { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(body) }).then(async response => { if (!response.ok) throw new Error((await response.text()) || `Admin registration failed: ${response.status}`); return response.json(); }),
+  register: (body: { username: string; password: string }) =>
+    fetch(API_BASE + "/auth/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(body)
+    }).then(async response => {
+      if (!response.ok) throw new Error((await response.text()) || `Registration failed: ${response.status}`);
+      return response.json();
+    }),
   dashboard: (c: Credentials) => apiFetch<Dashboard>("/analytics/dashboard", c),
   catalog: (c: Credentials) => apiFetch<EntityCatalog>("/analytics/catalog", c),
   rows: (slug: string, page: number, size: number, c: Credentials) =>

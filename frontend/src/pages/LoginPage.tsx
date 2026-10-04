@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "primereact/button";
 import { InputText } from "primereact/inputtext";
 import { Password } from "primereact/password";
@@ -13,6 +13,7 @@ export function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const location = useLocation();
 
   if (credentials) return <Navigate to="/" replace />;
 
@@ -38,11 +39,14 @@ export function LoginPage() {
         <div className="eyebrow">ERPLANCERS ERP</div>
         <h1>Welcome back</h1>
         <p>Secure access to your ERP operations and BI workspace.</p>
+        {location.state?.registered && <Message severity="success" text="Registration successful. You can now sign in." />}
         {error && <Message severity="error" text={error} />}
         <label>Username<InputText value={username} onChange={e => setUsername(e.target.value)} autoFocus /></label>
         <label>Password<Password value={password} onChange={e => setPassword(e.target.value)} feedback={false} toggleMask /></label>
         <Button label="Sign in" icon="pi pi-arrow-right" iconPos="right" type="submit" className="w-full" />
         <small>Use HTTPS in production. Credentials are retained only for the current browser session.</small>
+        <Link to="/register">Create a new account</Link>
+        <Link to="/register-admin">Create administrator</Link>
       </form>
     </div>
   );
