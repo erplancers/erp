@@ -73,6 +73,7 @@ public class DynamicCrudService {
         });
 
         applyReferences(wrapper, descriptor.entityType(), values);
+        applyNestedCollections(wrapper, descriptor.entityType(), values);
         return (EntityBase) descriptor.repository().save(entity);
     }
 
@@ -103,6 +104,135 @@ public class DynamicCrudService {
         }
     }
 
+
+    private void applyNestedCollections(BeanWrapper parentWrapper, Class<?> parentType, Map<String, String> values) {
+        for (PropertyDescriptor property : properties(parentType)) {
+            if (!isCollection(property) || !parentWrapper.isWritableProperty(property.getName())) continue;
+            Class<?> childType = collectionElementType(property);
+            if (childType == null || !EntityBase.class.isAssignableFrom(childType)) continue;
+            CrudRegistry.CrudDescriptor childDescriptor = findByEntityType(childType);
+            String prefix = "nested." + property.getName() + ".";
+            Map<Integer, Map<String, String>> rows = new TreeMap<>();
+            values.forEach((key, value) -> {
+                if (!key.startsWith(prefix)) return;
+                String remainder = key.substring(prefix.length());
+                int dot = remainder.indexOf('.');
+                if (dot <= 0) return;
+                try {
+                    int index = Integer.parseInt(remainder.substring(0, dot));
+                    rows.computeIfAbsent(index, ignored -> new LinkedHashMap<>()).put(remainder.substring(dot + 1), value);
+                } catch (NumberFormatException ignored) {}
+            });
+            if (rows.isEmpty()) continue;
+            List<Object> activeChildren = new ArrayList<>();
+            for (Map<String, String> row : rows.values()) {
+                Long childId = parseId(row.get("_id"));
+                if ("true".equalsIgnoreCase(row.get("_delete"))) {
+                    if (childId != null) childDescriptor.repository().deleteById(childId);
+                    continue;
+                }
+                activeChildren.add(saveNestedEntity(childDescriptor, childId, row));
+            }
+            parentWrapper.setPropertyValue(property.getName(), collectionValue(parentWrapper.getPropertyType(property.getName()), activeChildren));
+        }
+    }
+
+    private EntityBase saveNestedEntity(CrudRegistry.CrudDescriptor descriptor, Long id, Map<String, String> values) {
+        EntityBase entity;
+        if (id == null) {
+            try {
+                entity = (EntityBase) descriptor.entityType().getDeclaredConstructor().newInstance();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException("Nested entity needs a no-args constructor: " + descriptor.entityType().getName(), e);
+            }
+        } else {
+            Object found = descriptor.repository().findById(id).orElse(null);
+            if (!(found instanceof EntityBase existing)) throw new IllegalArgumentException("Nested resource not found: " + id);
+            entity = existing;
+        }
+        BeanWrapper wrapper = new BeanWrapperImpl(entity);
+        values.forEach((name, value) -> {
+            if ("_id".equals(name) || "_delete".equals(name) || name.startsWith("ref.") || name.startsWith("collection.")) return;
+            if (!wrapper.isWritableProperty(name) || value == null || value.isBlank()) return;
+            Class<?> propertyType = wrapper.getPropertyType(name);
+            if (propertyType == null || !isSimple(propertyType)) return;
+            Object converted = conversionService.convert(value, propertyType);
+            if (converted != null) wrapper.setPropertyValue(name, converted);
+        });
+        applyReferences(wrapper, descriptor.entityType(), values);
+        return (EntityBase) descriptor.repository().save(entity);
+    }
+
+    private Long parseId(String value) {
+        if (value == null || value.isBlank()) return null;
+        return Long.valueOf(value);
+    }
+
+    private List<Map<String, Object>> nestedCollectionMetadata(Class<?> type, Long id) {
+        Map<String, Object> currentValues = id == null ? Map.of() : get(type, id);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (PropertyDescriptor property : properties(type)) {
+            if (!isCollection(property) || property.getWriteMethod() == null) continue;
+            Class<?> childType = collectionElementType(property);
+            if (childType == null || !EntityBase.class.isAssignableFrom(childType)) continue;
+            CrudRegistry.CrudDescriptor childDescriptor = findByEntityType(childType);
+            Map<String, Object> collection = new LinkedHashMap<>();
+            collection.put("name", property.getName());
+            collection.put("type", childType.getSimpleName());
+            collection.put("slug", childDescriptor.slug());
+            collection.put("fields", scalarMetadata(childType));
+            collection.put("references", referenceMetadata(childType));
+            List<Map<String, Object>> rows = new ArrayList<>();
+            Object current = currentValues.get(property.getName());
+            if (current instanceof Collection<?> children) {
+                for (Object child : children) {
+                    BeanWrapper childWrapper = new BeanWrapperImpl(child);
+                    Map<String, Object> row = new LinkedHashMap<>();
+                    row.put("id", ((EntityBase) child).getId());
+                    Map<String, Object> rowValues = new LinkedHashMap<>();
+                    for (PropertyDescriptor field : properties(childType)) {
+                        if (isSimple(field.getPropertyType()) && childWrapper.isReadableProperty(field.getName())) rowValues.put(field.getName(), childWrapper.getPropertyValue(field.getName()));
+                    }
+                    row.put("values", rowValues);
+                    Map<String, Object> selected = new LinkedHashMap<>();
+                    for (PropertyDescriptor field : properties(childType)) {
+                        if (isReference(field) && childWrapper.isReadableProperty(field.getName())) {
+                            Object ref = childWrapper.getPropertyValue(field.getName());
+                            if (ref instanceof EntityBase related) selected.put(field.getName(), related.getId());
+                        }
+                    }
+                    row.put("selected", selected);
+                    rows.add(row);
+                }
+            }
+            collection.put("rows", rows);
+            result.add(collection);
+        }
+        return result;
+    }
+
+    private Map<String, List<Map<String, Object>>> nestedOptions(Class<?> type) {
+        Map<String, List<Map<String, Object>>> result = new LinkedHashMap<>();
+        for (PropertyDescriptor parentProperty : properties(type)) {
+            if (!isCollection(parentProperty)) continue;
+            Class<?> childType = collectionElementType(parentProperty);
+            if (childType == null || !EntityBase.class.isAssignableFrom(childType)) continue;
+            for (PropertyDescriptor childProperty : properties(childType)) {
+                if (!isReference(childProperty)) continue;
+                CrudRegistry.CrudDescriptor targetDescriptor = findByEntityType(childProperty.getPropertyType());
+                List<Map<String, Object>> options = new ArrayList<>();
+                targetDescriptor.repository().findAll(PageRequest.of(0, 100)).forEach(entity -> {
+                    Map<String, Object> option = new LinkedHashMap<>();
+                    option.put("id", ((EntityBase) entity).getId());
+                    option.put("label", displayLabel(entity));
+                    options.add(option);
+                });
+                result.put(parentProperty.getName() + "." + childProperty.getName(), options);
+            }
+        }
+        return result;
+    }
+
     @Transactional
     public void delete(String slug, Long id) {
         registry.get(slug).repository().deleteById(id);
@@ -118,6 +248,8 @@ public class DynamicCrudService {
         metadata.put("options", relationshipOptions(descriptor.entityType()));
         metadata.put("values", id == null ? Map.of() : get(slug, id));
         metadata.put("selected", id == null ? Map.of() : selectedRelationships(descriptor.entityType(), id));
+        metadata.put("nestedCollections", nestedCollectionMetadata(descriptor.entityType(), id));
+        metadata.put("nestedOptions", nestedOptions(descriptor.entityType()));
         return metadata;
     }
 
@@ -197,7 +329,8 @@ public class DynamicCrudService {
     }
 
     private Map<String, Object> selectedRelationships(Class<?> type, Long id) {
-        Object entity = findByEntityType(type).repository().findById(id).orElseThrow();
+        Object entity = findByEntityType(type).repository().findById(id).orElse(null);
+        if (!(entity instanceof EntityBase)) throw new IllegalArgumentException("Resource not found: " + id);
         BeanWrapper wrapper = new BeanWrapperImpl(entity);
         Map<String, Object> selected = new LinkedHashMap<>();
         for (PropertyDescriptor p : properties(type)) {
