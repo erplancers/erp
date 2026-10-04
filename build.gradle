@@ -28,6 +28,7 @@ dependencies {
 	implementation group: 'com.google.code.gson', name: 'gson', version: '2.14.0'
 	implementation 'org.springframework.boot:spring-boot-starter-quartz'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
+	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'org.apache.camel.springboot:camel-spring-boot-starter:4.20.0'
 	implementation 'org.jobrunr:jobrunr-spring-boot-4-starter:8.7.0'
