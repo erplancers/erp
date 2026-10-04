@@ -37,7 +37,7 @@ class ApiSecurityIntegrationTest {
         allowRole("ACCOUNTING", "accounting", "*", "READ");
         allowRole("ACCOUNTING", "accounting", "invoice", "WRITE");
         allowRole("REPORTS", "*", "*", "READ");
-        denyUser("readonly", "accounting", "invoice", "READ");
+        denyUser("readonly", "finance", "invoice", "READ");
     }
 
     @Test void unauthenticatedApiIsRejected() throws Exception {
