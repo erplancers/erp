@@ -100,12 +100,12 @@ class RestAnalyticsControllerMockMvcTest {
         mvc.perform(get("/api/analytics/resources/invoice/aggregate")
                         .param("metrics", "count")
                         .param("limit", "100")
-                        .param("filter.invoiceStatus", "PAID")
+                        .param("filter.invoiceStatus", "POSTED")
                         .with(httpBasic("analytics-admin", "analytics-pass")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resource", is("invoice")))
                 .andExpect(jsonPath("$.metrics[0]", is("count")))
-                .andExpect(jsonPath("$.filters.invoiceStatus", is("PAID")))
+                .andExpect(jsonPath("$.filters.invoiceStatus", is("POSTED")))
                 .andExpect(jsonPath("$.data", notNullValue()));
     }
 
