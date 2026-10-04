@@ -198,16 +198,7 @@ public class AdvancedAnalyticsEngine {
             AggregateReportingService.AggregateReport report,
             List<String> requested) {
 
-        List<String> available = new ArrayList<>();
-        for (String metric : report.metrics()) {
-            for (Map<String, Object> row : report.data()) {
-                Object value = row.get(metric);
-                if (value instanceof Number) {
-                    available.add(metric);
-                    break;
-                }
-            }
-        }
+        List<String> available = new ArrayList<>(report.metrics());
 
         if (requested == null || requested.isEmpty()) {
             return available;
