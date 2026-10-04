@@ -159,7 +159,7 @@ public class EntityDataAnalysisService {
         boolean numeric = Number.class.isAssignableFrom(attribute.getJavaType())
                 || attribute.getJavaType().isPrimitive();
 
-        boolean comparable = Comparable.class.isAssignableFrom(attribute.getJavaType());
+        boolean comparable = supportsOrdering(attribute.getJavaType());
         if (numeric) {
             selections.add(cb.min(asNumber(field)));
             selections.add(cb.max(asNumber(field)));
@@ -222,6 +222,12 @@ public class EntityDataAnalysisService {
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Expression<? extends Comparable> asComparable(Expression<?> expression) {
         return (Expression) expression;
+    }
+
+    private boolean supportsOrdering(Class<?> type) {
+        return String.class.isAssignableFrom(type)
+                || Temporal.class.isAssignableFrom(type)
+                || java.util.Date.class.isAssignableFrom(type);
     }
 
     private boolean isCategorical(Class<?> type) {
