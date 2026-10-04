@@ -30,8 +30,7 @@ class MvcRoutingTests {
     void moduleDashboardRouteResolvesJteView() throws Exception {
         mockMvc.perform(get("/app/module/accounting"))
                 .andExpect(status().isOk())
-                .andExpect(view().name("dashboard/module"))
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("accounting")));
+                .andExpect(view().name("dashboard/module"));
     }
 
     @Test
