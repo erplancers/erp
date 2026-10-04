@@ -265,6 +265,96 @@ class ApiSecurityIntegrationTest {
                 .andExpect(status().isNoContent());
     }
 
+    @Test void adminCanListPaymentTransactionsAndReadMetadata() throws Exception {
+        mvc.perform(get("/api/resources/payment-transaction")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .param("page", "0")
+                        .param("size", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", notNullValue()))
+                .andExpect(jsonPath("$.size", is(10)))
+                .andExpect(jsonPath("$.number", is(0)));
+
+        mvc.perform(get("/api/resources/payment-transaction/metadata")
+                        .with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", not(empty())));
+    }
+
+    @Test void adminCanFilterPaymentTransactionsInBiQuery() throws Exception {
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {"status": "POSTED"},
+                                  "orderBy": "sum:amount:desc",
+                                  "limit": 25
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.dimensions", hasItem("status")))
+                .andExpect(jsonPath("$.rows", notNullValue()));
+    }
+
+    @Test void adminCanRunOlapCubeWithoutPivot() throws Exception {
+        mvc.perform(post("/api/bi/olap/resources/payment-transaction/cube")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {},
+                                  "orderBy": "sum:amount:desc",
+                                  "limit": 25,
+                                  "includeTotals": true,
+                                  "includeRollup": false,
+                                  "pivotDimension": ""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.cells", notNullValue()))
+                .andExpect(jsonPath("$.grandTotal", notNullValue()));
+    }
+
+    @Test void adminCanDrillDownPaymentTransactionsWithFinerDimension() throws Exception {
+        mvc.perform(post("/api/bi/olap/resources/payment-transaction/drilldown")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status", "paymentTransactionDirection"],
+                                  "measures": ["count"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 25,
+                                  "includeTotals": false,
+                                  "includeRollup": false,
+                                  "pivotDimension": ""
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.cells", notNullValue()));
+    }
+
+    @Test void crudRejectsUnknownResource() throws Exception {
+        mvc.perform(get("/api/resources/does-not-exist")
+                        .with(httpBasic("admin", "admin-pass")))
+                .andExpect(status().isConflict());
+    }
+
+    @Test void crudMetadataRequiresReadAuthorization() throws Exception {
+        mvc.perform(get("/api/resources/customer/metadata")
+                        .with(httpBasic("accounting", "accounting-pass")))
+                .andExpect(status().isForbidden());
+    }
+
     @Test void unauthorizedBiOlapAndCrudWritesAreRejected() throws Exception {
         mvc.perform(get("/api/bi/olap/catalog"))
                 .andExpect(status().isUnauthorized());
