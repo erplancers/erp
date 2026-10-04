@@ -72,6 +72,8 @@ public class CrudController {
         model.addAttribute("options", metadata.get("options"));
         model.addAttribute("values", metadata.get("values"));
         model.addAttribute("selected", metadata.get("selected"));
+        model.addAttribute("nestedCollections", metadata.get("nestedCollections"));
+        model.addAttribute("nestedOptions", metadata.get("nestedOptions"));
     }
 
     @PostMapping("/{slug}/save")
