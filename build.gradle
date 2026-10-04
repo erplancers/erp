@@ -53,6 +53,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-websocket-test'
+	testImplementation 'org.springframework.security:spring-security-test'
 
 	runtimeOnly 'com.h2database:h2'
 	testCompileOnly 'org.projectlombok:lombok'
