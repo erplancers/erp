@@ -41,26 +41,30 @@ public class RestBiController {
     }
 
     @GetMapping("/olap/cubes")
-    public JpaOlapCubeService.AutoCubeCatalog autoCubes(Authentication authentication) {
+    public JpaOlapCubeService.AutoCubeCatalog autoCubes(
+            Authentication authentication,
+            @RequestParam(defaultValue = "2") int relationDepth) {
         requireAuthenticated(authentication);
-        return jpaOlap.cubes();
+        return jpaOlap.cubes(relationDepth);
     }
 
     @GetMapping("/olap/cubes/{cube}/relations")
     public JpaOlapCubeService.RelationDiscovery relations(
             Authentication authentication,
             @PathVariable String cube,
-            @RequestParam(required = false, defaultValue = "") String relation) {
+            @RequestParam(required = false, defaultValue = "") String relation,
+            @RequestParam(defaultValue = "2") int relationDepth) {
         requireRead(authentication, cube);
-        return jpaOlap.discoverRelations(cube, relation);
+        return jpaOlap.discoverRelations(cube, relation, relationDepth);
     }
 
     @GetMapping("/olap/cubes/{cube}")
     public JpaOlapCubeService.AutoCube autoCube(
             Authentication authentication,
-            @PathVariable String cube) {
+            @PathVariable String cube,
+            @RequestParam(defaultValue = "2") int relationDepth) {
         requireRead(authentication, cube);
-        return jpaOlap.cube(cube);
+        return jpaOlap.cube(cube, relationDepth);
     }
 
     @PostMapping("/olap/cubes/{cube}/query")
