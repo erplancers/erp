@@ -136,6 +136,38 @@
                                         </div>
                                     </div>
                                 @endfor
+                                <div class="nested-row nested-prototype d-none">
+                                    <input type="hidden" disabled class="nested-id"
+                                           name="nested.@collection.get("name").__INDEX__._id" value="">
+                                    <input type="hidden" disabled class="nested-delete"
+                                           name="nested.@collection.get("name").__INDEX__._delete" value="false">
+                                    <div class="row g-3">
+                                        @for(var entry : ((java.util.Map<java.lang.String, java.lang.String>) collection.get("fields")).entrySet())
+                                            @if(!entry.getKey().equals("id"))
+                                                <div class="col-md-6">
+                                                    <label class="form-label small fw-medium">@entry.getKey()</label>
+                                                    <input disabled class="form-control"
+                                                           name="nested.@collection.get("name").__INDEX__.@entry.getKey()" value="">
+                                                </div>
+                                            @endif
+                                        @endfor
+                                        @for(var ref : (java.util.List<java.util.Map<java.lang.String, java.lang.String>>) collection.get("references"))
+                                            <div class="col-md-6">
+                                                <label class="form-label small fw-medium">@ref.get("name")</label>
+                                                <select disabled class="form-select"
+                                                        name="nested.@collection.get("name").__INDEX__.ref.@ref.get("name")">
+                                                    <option value="">Choose @ref.get("type")...</option>
+                                                    @for(var option : nestedOptions.getOrDefault(collection.get("name") + "." + ref.get("name"), java.util.List.of()))
+                                                        <option value="@option.get("id")">@option.get("label")</option>
+                                                    @endfor
+                                                </select>
+                                            </div>
+                                        @endfor
+                                    </div>
+                                    <div class="d-flex justify-content-end mt-3">
+                                        <button class="btn btn-outline-danger btn-sm remove-nested-row" type="button">Remove</button>
+                                    </div>
+                                </div>
                             </div>
                         </section>
                     @endfor
@@ -193,8 +225,10 @@ document.querySelectorAll('.add-nested-row').forEach(function (button) {
         if (!source) return;
         const clone = source.cloneNode(true);
         const index = 'new-' + Date.now();
+        clone.classList.remove('nested-prototype', 'd-none');
         clone.querySelectorAll('input, select').forEach(function (field) {
-            field.name = field.name.replace(/\\.\\d+\\./, '.' + index + '.');
+            field.disabled = false;
+            field.name = field.name.replace(/__INDEX__|\\.\\d+\\./g, '.' + index + '.');
             if (field.classList.contains('nested-id')) field.value = '';
             if (field.classList.contains('nested-delete')) field.value = 'false';
             if (field.tagName === 'INPUT' && !field.classList.contains('nested-id') && !field.classList.contains('nested-delete')) field.value = '';
