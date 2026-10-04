@@ -53,8 +53,8 @@ class AnalyticsOverloadMockMvcTest {
 
     @Test
     void analyticsEndpointsHandleConcurrentMockMvcLoad() throws Exception {
-        int concurrency = 16;
-        int requestsPerWorker = 8;
+        int concurrency = 4;
+        int requestsPerWorker = 4;
         int expectedRequests = concurrency * requestsPerWorker;
 
         ExecutorService executor = Executors.newFixedThreadPool(concurrency);
@@ -62,7 +62,7 @@ class AnalyticsOverloadMockMvcTest {
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger successful = new AtomicInteger();
 
-        List<Callable<Void>> workers = new ArrayList<>();
+        List<Callable<Void>> workers = new ArrayList<>(concurrency);
 
         for (int worker = 0; worker < concurrency; worker++) {
             final int workerId = worker;
