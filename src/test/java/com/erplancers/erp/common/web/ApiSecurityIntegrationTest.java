@@ -69,6 +69,25 @@ class ApiSecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test void adminCanRunPaymentTransactionBiQuery() throws Exception {
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
+                .andExpect(jsonPath("$.rows", notNullValue()));
+    }
+
     @Test void accountingCannotReadUnprivilegedResource() throws Exception {
         mvc.perform(get("/api/resources/customer").with(httpBasic("accounting", "accounting-pass")))
                 .andExpect(status().isForbidden());
