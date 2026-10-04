@@ -204,6 +204,52 @@ class ApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.resource", is("payment-transaction")));
     }
 
+    @Test void adminCanAutoDiscoverJpaOlapRelationsWithConfiguredDepth() throws Exception {
+        mvc.perform(get("/api/bi/olap/cubes")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .param("relationDepth", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cubeCount", greaterThan(0)));
+
+        mvc.perform(get("/api/bi/olap/cubes/payment-transaction/relations")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .param("relation", "currency")
+                        .param("relationDepth", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.paths", not(empty())));
+
+        mvc.perform(get("/api/bi/olap/cubes/payment-transaction")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .param("relationDepth", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.dimensions", hasItem("currency.title")));
+    }
+
+    @Test void adminCanQueryAutomaticallyGeneratedCubeThroughJpaRelation() throws Exception {
+        mvc.perform(post("/api/bi/olap/cubes/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": [],
+                                  "measures": ["count"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 25,
+                                  "includeTotals": true,
+                                  "includeRollup": false,
+                                  "pivotDimension": "",
+                                  "relation": "currency",
+                                  "relationDepth": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.dimensions", hasItem("currency.title")))
+                .andExpect(jsonPath("$.cells", notNullValue()));
+    }
+
     @Test void adminCanReadOlapCatalogAndProfiles() throws Exception {
         mvc.perform(get("/api/bi/olap/catalog").with(httpBasic("admin", "admin-pass")))
                 .andExpect(status().isOk())
