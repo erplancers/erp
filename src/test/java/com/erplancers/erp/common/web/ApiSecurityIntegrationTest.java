@@ -70,25 +70,7 @@ class ApiSecurityIntegrationTest {
                 .andExpect(status().isOk());
     }
 
-    @Test void adminCanRunPaymentTransactionBiQuery() throws Exception {
-        var result = mvc.perform(post("/api/bi/resources/payment-transaction/query")
-                        .with(httpBasic("admin", "admin-pass"))
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "dimensions": ["status"],
-                                  "measures": ["count", "sum:amount"],
-                                  "filters": {},
-                                  "orderBy": "count:desc",
-                                  "limit": 100
-                                }
-                                """))
-                .andReturn();
-
-        assertThat(result.getResponse().getStatus())
-                .as("BI response: %s", result.getResponse().getContentAsString())
-                .isEqualTo(200);
-
+    @Test void adminCanGroupPaymentTransactionsByStatus() throws Exception {
         mvc.perform(post("/api/bi/resources/payment-transaction/query")
                         .with(httpBasic("admin", "admin-pass"))
                         .contentType("application/json")
@@ -103,6 +85,45 @@ class ApiSecurityIntegrationTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.measures", hasItem("count")))
+                .andExpect(jsonPath("$.rows", notNullValue()));
+    }
+
+    @Test void adminCanSumPaymentTransactionAmount() throws Exception {
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": [],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
+                .andExpect(jsonPath("$.rows", notNullValue()));
+    }
+
+    @Test void adminCanRunPaymentTransactionBiQueryWithDimensionAndSum() throws Exception {
+        mvc.perform(post("/api/bi/resources/payment-transaction/query")
+                        .with(httpBasic("admin", "admin-pass"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "dimensions": ["status"],
+                                  "measures": ["count", "sum:amount"],
+                                  "filters": {},
+                                  "orderBy": "count:desc",
+                                  "limit": 100
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
                 .andExpect(jsonPath("$.rows", notNullValue()));
     }
 
@@ -229,7 +250,7 @@ class ApiSecurityIntegrationTest {
                 .andExpect(status().isUnauthorized());
 
         mvc.perform(post("/api/bi/resources/payment-transaction/query")
-                        .with(httpBasic("accounting", "accounting-pass"))
+                        .with(httpBasic("admin", "admin-pass"))
                         .contentType("application/json")
                         .content("{\"dimensions\":[\"status\"],\"measures\":[\"count\"]}"))
                 .andExpect(status().isOk());
