@@ -29,7 +29,7 @@ public class PolicyAuthorizationService {
         if (hasRole(authentication, "ADMIN")) return true;
 
         List<String> roles = authentication.getAuthorities().stream()
-                .map(a -> a.getAuthority())
+                .map(a -> normalize(a.getAuthority()))
                 .toList();
         List<ErpPolicy> rules = new ArrayList<>(policies.findByUsernameIgnoreCase(username));
         if (!roles.isEmpty()) rules.addAll(policies.findByRoleIn(roles));
