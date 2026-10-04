@@ -26,15 +26,12 @@ import java.util.Set;
 public class JpaOlapCubeService {
 
     private final EntityDataAnalysisService entityAnalysis;
-    private final CrudRegistryAdapter registry;
     private final OlapAnalysisEngine olap;
 
     public JpaOlapCubeService(
             EntityDataAnalysisService entityAnalysis,
-            com.erplancers.erp.common.web.CrudRegistry registry,
             OlapAnalysisEngine olap) {
         this.entityAnalysis = entityAnalysis;
-        this.registry = new CrudRegistryAdapter(registry);
         this.olap = olap;
     }
 
@@ -164,18 +161,6 @@ public class JpaOlapCubeService {
                 "java.lang.Long", "java.lang.Float", "java.lang.Double",
                 "java.math.BigDecimal", "java.math.BigInteger"
         ).contains(javaType);
-    }
-
-    /**
-     * Small adapter keeps this service focused on cube metadata while retaining
-     * the existing CrudRegistry as the source of truth.
-     */
-    private static final class CrudRegistryAdapter {
-        private final com.erplancers.erp.common.web.CrudRegistry registry;
-
-        private CrudRegistryAdapter(com.erplancers.erp.common.web.CrudRegistry registry) {
-            this.registry = registry;
-        }
     }
 
     public record AutoCubeCatalog(
