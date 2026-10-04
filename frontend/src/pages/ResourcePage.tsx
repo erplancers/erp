@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { DataTable } from "primereact/datatable";
@@ -11,7 +12,7 @@ import { api } from "../api";
 export function ResourcePage() {
   const { slug = "" } = useParams();
   const { credentials } = useAuth();
-  const [page, setPage] = React.useState(0);
+  const [page, setPage] = useState(0);
   const query = useQuery({ queryKey: ["rows", slug, page], queryFn: () => api.rows(slug, page, 25, credentials!), enabled: !!credentials && !!slug });
   if (query.isPending) return <ProgressSpinner />;
   if (query.isError) return <Message severity="error" text={query.error.message} />;
