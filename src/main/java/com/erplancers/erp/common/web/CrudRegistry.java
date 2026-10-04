@@ -33,7 +33,12 @@ public class CrudRegistry {
         String baseSlug = slug;
         int suffix = 2;
         while (descriptors.containsKey(slug)) slug = baseSlug + "-" + suffix++;
-        descriptors.put(slug, new CrudDescriptor(slug, entityType, repository));
+        descriptors.put(slug, new CrudDescriptor(
+                slug,
+                entityType,
+                repository,
+                entityType.getPackageName().replace("com.erplancers.erp.", "").split("\.")[0]
+        ));
     }
 
     private Class<?> resolveEntityType(Class<?> type) {
@@ -75,5 +80,10 @@ public class CrudRegistry {
         return value.replaceAll("([a-z])([A-Z])", "$1-$2").toLowerCase();
     }
 
-    public record CrudDescriptor(String slug, Class<?> entityType, ErpRepository repository) {}
+    public record CrudDescriptor(
+            String slug,
+            Class<?> entityType,
+            ErpRepository repository,
+            String module
+    ) {}
 }
