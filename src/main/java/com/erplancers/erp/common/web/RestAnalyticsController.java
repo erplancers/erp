@@ -1,5 +1,6 @@
 package com.erplancers.erp.common.web;
 
+import com.erplancers.erp.common.reporting.AdvancedAnalyticsEngine;
 import com.erplancers.erp.common.reporting.AggregateReportingService;
 import com.erplancers.erp.common.reporting.DashboardReportingService;
 import com.erplancers.erp.common.reporting.EntityDataAnalysisService;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class RestAnalyticsController {
 
     private final AggregateReportingService aggregates;
+    private final AdvancedAnalyticsEngine advancedAnalytics;
     private final DashboardReportingService dashboards;
     private final EntityDataAnalysisService analysis;
     private final PolicyAuthorizationService authorization;
@@ -81,6 +83,28 @@ public class RestAnalyticsController {
             @RequestBody AggregateReportingService.AggregateRequest request) {
         requireRead(authentication, slug);
         return aggregates.aggregate(slug, request);
+    }
+
+    @GetMapping("/resources/{slug}/advanced")
+    public AdvancedAnalyticsEngine.AdvancedAnalysis advanced(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "") String fields,
+            @RequestParam(defaultValue = "10000") int sampleSize,
+            @RequestParam(defaultValue = "3.0") double zScoreThreshold) {
+        requireRead(authentication, slug);
+        return advancedAnalytics.analyze(slug,
+                new AdvancedAnalyticsEngine.AnalysisRequest(
+                        csv(fields), sampleSize, zScoreThreshold));
+    }
+
+    @PostMapping("/resources/{slug}/advanced")
+    public AdvancedAnalyticsEngine.AdvancedAnalysis advancedPost(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestBody AdvancedAnalyticsEngine.AnalysisRequest request) {
+        requireRead(authentication, slug);
+        return advancedAnalytics.analyze(slug, request);
     }
 
     @GetMapping("/resources")
