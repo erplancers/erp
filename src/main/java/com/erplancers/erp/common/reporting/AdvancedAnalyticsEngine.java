@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -21,10 +20,10 @@ import java.util.Map;
 /**
  * Database-backed advanced analytics engine for registered ERP entities.
  *
- * <p>The engine intentionally works on scalar numeric attributes only. It fetches
- * a bounded sample from the database and calculates descriptive statistics,
- * quantiles, outlier counts and pairwise Pearson correlations without requiring
- * a separate analytics database.</p>
+ * <p>The engine can analyze either raw numeric entity attributes or the numeric
+ * result columns produced by {@link AggregateReportingService}. Aggregation is
+ * performed by the database first, so grouped analytics do not require loading
+ * the underlying entity rows into the JVM.</p>
  */
 @Service
 @Transactional(readOnly = true)
@@ -37,22 +36,33 @@ public class AdvancedAnalyticsEngine {
 
     private final EntityManager entityManager;
     private final CrudRegistry registry;
+    private final AggregateReportingService aggregates;
 
-    public AdvancedAnalyticsEngine(EntityManager entityManager, CrudRegistry registry) {
+    public AdvancedAnalyticsEngine(
+            EntityManager entityManager,
+            CrudRegistry registry,
+            AggregateReportingService aggregates) {
         this.entityManager = entityManager;
         this.registry = registry;
+        this.aggregates = aggregates;
     }
 
     public AdvancedAnalysis analyze(String slug, AnalysisRequest request) {
         CrudRegistry.CrudDescriptor descriptor = registry.get(slug);
-        EntityType<?> entity = entityManager.getMetamodel().entity(descriptor.entityType());
 
-        int sampleSize = clamp(request.sampleSize(), 1, MAX_SAMPLE_SIZE, DEFAULT_SAMPLE_SIZE);
+        int requestedSampleSize = clamp(
+                request.sampleSize(), 1, MAX_SAMPLE_SIZE, DEFAULT_SAMPLE_SIZE);
         double zScore = request.zScoreThreshold() > 0
                 ? request.zScoreThreshold()
                 : DEFAULT_Z_SCORE;
 
+        if (request.aggregate() != null) {
+            return analyzeAggregate(slug, descriptor, request, requestedSampleSize, zScore);
+        }
+
+        EntityType<?> entity = entityManager.getMetamodel().entity(descriptor.entityType());
         List<String> fields = numericFields(entity, request.fields());
+
         if (fields.isEmpty()) {
             throw new IllegalArgumentException("No numeric analytics fields available for " + slug);
         }
@@ -60,7 +70,81 @@ public class AdvancedAnalyticsEngine {
             fields = fields.subList(0, MAX_FIELDS);
         }
 
-        List<Object[]> rows = fetchRows(descriptor.entityType(), fields, sampleSize);
+        List<Object[]> rows = fetchRows(descriptor.entityType(), fields, requestedSampleSize);
+        return buildAnalysis(
+                slug,
+                descriptor.module(),
+                descriptor.entityType().getSimpleName(),
+                fields,
+                rows,
+                requestedSampleSize,
+                zScore,
+                false,
+                List.of(),
+                List.of());
+    }
+
+    private AdvancedAnalysis analyzeAggregate(
+            String slug,
+            CrudRegistry.CrudDescriptor descriptor,
+            AnalysisRequest request,
+            int requestedSampleSize,
+            double zScore) {
+
+        AggregateReportingService.AggregateRequest aggregateRequest = request.aggregate();
+        int aggregateLimit = Math.min(
+                Math.max(1, aggregateRequest.limit()),
+                Math.min(requestedSampleSize, 1000));
+
+        AggregateReportingService.AggregateRequest boundedRequest =
+                new AggregateReportingService.AggregateRequest(
+                        aggregateRequest.groupBy(),
+                        aggregateRequest.metrics(),
+                        aggregateRequest.filters(),
+                        aggregateRequest.orderBy(),
+                        aggregateLimit);
+
+        AggregateReportingService.AggregateReport report =
+                aggregates.aggregate(slug, boundedRequest);
+
+        List<String> fields = aggregateNumericFields(
+                report,
+                request.fields());
+
+        if (fields.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "No numeric aggregate metrics available for " + slug);
+        }
+        if (fields.size() > MAX_FIELDS) {
+            fields = fields.subList(0, MAX_FIELDS);
+        }
+
+        List<Object[]> rows = aggregateRows(report.data(), fields);
+
+        return buildAnalysis(
+                slug,
+                descriptor.module(),
+                descriptor.entityType().getSimpleName(),
+                fields,
+                rows,
+                requestedSampleSize,
+                zScore,
+                true,
+                report.groupBy(),
+                report.metrics());
+    }
+
+    private AdvancedAnalysis buildAnalysis(
+            String slug,
+            String module,
+            String entity,
+            List<String> fields,
+            List<Object[]> rows,
+            int requestedSampleSize,
+            double zScore,
+            boolean aggregated,
+            List<String> groupBy,
+            List<String> metrics) {
 
         Map<String, NumericAnalysis> statistics = new LinkedHashMap<>();
         for (int i = 0; i < fields.size(); i++) {
@@ -72,12 +156,15 @@ public class AdvancedAnalyticsEngine {
 
         return new AdvancedAnalysis(
                 slug,
-                descriptor.module(),
-                descriptor.entityType().getSimpleName(),
+                module,
+                entity,
                 fields,
                 rows.size(),
-                sampleSize,
+                requestedSampleSize,
                 zScore,
+                aggregated,
+                groupBy,
+                metrics,
                 statistics,
                 correlations
         );
@@ -105,6 +192,53 @@ public class AdvancedAnalyticsEngine {
             }
         }
         return selected;
+    }
+
+    private List<String> aggregateNumericFields(
+            AggregateReportingService.AggregateReport report,
+            List<String> requested) {
+
+        List<String> available = new ArrayList<>();
+        for (String metric : report.metrics()) {
+            for (Map<String, Object> row : report.data()) {
+                Object value = row.get(metric);
+                if (value instanceof Number) {
+                    available.add(metric);
+                    break;
+                }
+            }
+        }
+
+        if (requested == null || requested.isEmpty()) {
+            return available;
+        }
+
+        List<String> selected = new ArrayList<>();
+        for (String field : requested) {
+            if (!available.contains(field)) {
+                throw new IllegalArgumentException(
+                        "Unknown or non-numeric aggregate metric '" + field + "'");
+            }
+            if (!selected.contains(field)) {
+                selected.add(field);
+            }
+        }
+        return selected;
+    }
+
+    private List<Object[]> aggregateRows(
+            List<Map<String, Object>> data,
+            List<String> fields) {
+
+        List<Object[]> rows = new ArrayList<>();
+        for (Map<String, Object> row : data) {
+            Object[] values = new Object[fields.size()];
+            for (int i = 0; i < fields.size(); i++) {
+                values[i] = row.get(fields.get(i));
+            }
+            rows.add(values);
+        }
+        return rows;
     }
 
     private boolean isNumeric(Attribute<?, ?> attribute) {
@@ -260,7 +394,12 @@ public class AdvancedAnalyticsEngine {
     public record AnalysisRequest(
             List<String> fields,
             int sampleSize,
-            double zScoreThreshold) {
+            double zScoreThreshold,
+            AggregateReportingService.AggregateRequest aggregate) {
+
+        public AnalysisRequest(List<String> fields, int sampleSize, double zScoreThreshold) {
+            this(fields, sampleSize, zScoreThreshold, null);
+        }
 
         public AnalysisRequest {
             fields = fields == null ? List.of() : List.copyOf(fields);
@@ -275,6 +414,9 @@ public class AdvancedAnalyticsEngine {
             int sampleSize,
             int requestedSampleSize,
             double zScoreThreshold,
+            boolean aggregated,
+            List<String> groupBy,
+            List<String> metrics,
             Map<String, NumericAnalysis> statistics,
             Map<String, Map<String, Double>> correlations) {}
 
