@@ -3,6 +3,7 @@ package com.erplancers.erp.common.web;
 import com.erplancers.erp.common.reporting.EntityReportService;
 import com.erplancers.erp.common.reporting.ModuleReportingService;
 import com.erplancers.erp.common.security.ErpAuthorizationService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -18,6 +19,7 @@ import java.util.Map;
  * Reports inherit the same module/resource authorization model as CRUD.
  */
 @RestController
+@SecurityRequirement(name = "basicAuth")
 @RequiredArgsConstructor
 @RequestMapping("/api/reports")
 public class RestReportController {
