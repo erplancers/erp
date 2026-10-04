@@ -39,9 +39,19 @@ export function OlapPage() {
   const [pivotDimension, setPivotDimension] = useState("");
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState("");
+  const [reportDepth, setReportDepth] = useState(2);
+  const [reportName, setReportName] = useState("");
+  const [reportRelations, setReportRelations] = useState<string[]>([]);
+  const [reportDimensions, setReportDimensions] = useState<string[]>([]);
+  const [reportMeasure, setReportMeasure] = useState("count");
 
   const cubes: AutoOlapCube[] = (catalog.data as AutoOlapCatalog | undefined)?.cubes || [];
   const cube = cubes.find(c => c.name === cubeName);
+  const relationQueries = useQuery({
+    queryKey: ["auto-olap-report-relations", cubeName, reportRelations, reportDepth],
+    queryFn: async () => Promise.all(reportRelations.map(relation => api.autoOlapRelations(cubeName, relation, credentials!, reportDepth))),
+    enabled: !!credentials && !!cubeName && reportRelations.length > 0
+  });
 
   const dimensionOptions = useMemo(
     () => (cube?.dimensions || []).map(value => ({ label: value, value })),
@@ -66,6 +76,10 @@ export function OlapPage() {
     setFilterValue("");
     setOrderBy("");
     setPivotDimension("");
+    setReportRelations([]);
+    setReportDimensions([]);
+    setReportName("");
+    setReportMeasure(selected?.measures.find(m => m.startsWith("sum:")) || "count");
     setResult(null);
     setError("");
   }
@@ -85,7 +99,7 @@ export function OlapPage() {
     });
   }
 
-  async function runQuery() {
+  function createAutoReport() {\n    if (!cube || reportDimensions.length === 0) return;\n    const finalName = reportName.trim() || cube.entity + " report";\n    setDimensions(reportDimensions);\n    setMeasures([reportMeasure]);\n    setReportName(finalName);\n    setResult(null);\n    setError("");\n  }\n\n  async function runQuery() {
     if (!cubeName || !cube || measures.length === 0) return;
     try {
       setError("");
@@ -233,6 +247,49 @@ export function OlapPage() {
             <Column field="relationships" header="Relationships" body={(row: AutoOlapCube) => row.relationships.length} />
           </DataTable>
         </TabPanel>
+        <TabPanel header="Auto Reports" leftIcon="pi pi-chart-bar">
+          <Card title="Create report from JPA relationships">
+            <p className="olap-help">Select JPA relations and fields to create reports such as <b>income per product by customer</b>.</p>
+            <div className="olap-query-row">
+              <label>Cube
+                <Dropdown value={cubeName} options={cubes.map(c => ({ label: c.name, value: c.name }))}
+                  onChange={e => selectCube(e.value)} placeholder="Select a fact entity" filter className="field-control" />
+              </label>
+              <label>JPA relations
+                <MultiSelect value={reportRelations}
+                  options={(cube?.relationships || []).map(value => ({ label: value, value }))}
+                  onChange={e => { setReportRelations(e.value); setReportDimensions([]); }}
+                  placeholder="Customer / Product / Order" display="chip" className="field-control" />
+              </label>
+              <label>Depth
+                <InputNumber value={reportDepth} onValueChange={e => setReportDepth(e.value || 2)} min={1} max={6} />
+              </label>
+            </div>
+            {cube && reportRelations.length > 0 && (
+              <label>Report dimensions
+                <MultiSelect value={reportDimensions}
+                  options={cube.dimensions.filter(field =>
+                    reportRelations.some(relation => field.startsWith(relation + "."))
+                  ).map(field => ({ label: field, value: field }))}
+                  onChange={e => setReportDimensions(e.value)}
+                  placeholder="Select customer/product fields" display="chip" className="field-control" />
+              </label>
+            )}
+            <div className="olap-query-row">
+              <label>Report name
+                <InputText value={reportName} onChange={e => setReportName(e.target.value)}
+                  placeholder="Income per product by customer" />
+              </label>
+              <label>Measure
+                <Dropdown value={reportMeasure} options={(cube?.measures || []).map(value => ({ label: value, value }))}
+                  onChange={e => setReportMeasure(e.value)} className="field-control" />
+              </label>
+              <Button label="Create Report" icon="pi pi-save" onClick={createAutoReport}
+                disabled={!cube || reportDimensions.length === 0 || !reportMeasure} />
+            </div>
+          </Card>
+        </TabPanel>
+
       </TabView>
     </>
   );
