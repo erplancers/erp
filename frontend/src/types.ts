@@ -14,3 +14,10 @@ export interface AutoOlapCube { name:string; resource:string; module:string; ent
 export interface AutoOlapCatalog { cubeCount:number; cubes:AutoOlapCube[]; }
 export interface AutoOlapRelationPath { path:string; targetEntity:string; relationshipType:string; }
 export interface AutoOlapRelationDiscovery { resource:string; relation:string; paths:AutoOlapRelationPath[]; }
+
+export interface BusinessRulePath { path:string; javaType:string; persistentType:string; relation:boolean; }
+export interface BusinessRuleSchema { resource:string; entity:string; paths:BusinessRulePath[]; }
+export interface BusinessRuleCondition { path:string; operator:string; value:unknown; }
+export interface BusinessRuleAction { type:string; target:string; expression:string; message:string; }
+export interface BusinessRule { name:string; priority:number; condition:BusinessRuleCondition; actions:BusinessRuleAction[]; }
+export interface BusinessRuleSet { name:string; entity:string; trigger:string; rules:BusinessRule[]; }
