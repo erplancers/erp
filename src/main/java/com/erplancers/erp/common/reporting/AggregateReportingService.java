@@ -11,6 +11,7 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.metamodel.Attribute;
 import jakarta.persistence.metamodel.ManagedType;
+import jakarta.persistence.metamodel.IdentifiableType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -335,7 +336,11 @@ public class AggregateReportingService {
                 ManagedType<?> targetType = entityManager.getMetamodel()
                         .managedType(current.getJavaType());
                 try {
-                    return current.get(targetType.getId(Object.class).getName());
+                    if (!(targetType instanceof IdentifiableType<?> identifiableType)) {
+                        throw new IllegalArgumentException("Target is not an identifiable entity");
+                    }
+                    return current.get(
+                            identifiableType.getId(identifiableType.getIdType().getJavaType()).getName());
                 } catch (IllegalArgumentException ex) {
                     throw new IllegalArgumentException(
                             "BI relationship dimension '" + path
