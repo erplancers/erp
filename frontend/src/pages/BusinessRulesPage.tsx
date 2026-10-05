@@ -48,7 +48,7 @@ function suggestionList(paths: string[], query: string) {
   return paths.filter(path => !q || path.toLowerCase().includes(q)).slice(0, 50);
 }
 
-export function BusinessRulesPage() {
+export function BusinessRulesPage() {\n  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);\n  const [expressionSuggestions, setExpressionSuggestions] = useState<string[]>([]);
   const { credentials } = useAuth();
   const [resource, setResource] = useState("");
   const [relationDepth, setRelationDepth] = useState(3);
@@ -310,7 +310,7 @@ export function BusinessRulesPage() {
                                 <AutoComplete
                                   value={action.expression}
                                   suggestions={expressionTokens}
-                                  completeMethod={() => undefined}
+                                  completeMethod={e => setExpressionSuggestions(suggestionList(expressionTokens, e.query))}
                                   onChange={e => updateAction(ruleIndex, actionIndex, { expression: e.value })}
                                   dropdown
                                   placeholder="SUM(lines.quantity * lines.unitPrice)"
