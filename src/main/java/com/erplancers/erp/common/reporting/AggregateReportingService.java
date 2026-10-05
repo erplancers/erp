@@ -325,6 +325,23 @@ public class AggregateReportingService {
                 joins.put(key, join);
             }
             current = join;
+
+            // A terminal relationship is a valid OLAP dimension, but JPA
+            // cannot portably GROUP BY the entity-valued expression itself.
+            // Resolve it to the target entity identifier so singular and
+            // collection-valued aggregate properties can be selected as
+            // dimensions (for example, customer or orderLines).
+            if (i == parts.length - 1) {
+                ManagedType<?> targetType = entityManager.getMetamodel()
+                        .managedType(current.getJavaType());
+                try {
+                    return current.get(targetType.getId(Object.class).getName());
+                } catch (IllegalArgumentException ex) {
+                    throw new IllegalArgumentException(
+                            "BI relationship dimension '" + path
+                                    + "' must target an entity with a single identifier", ex);
+                }
+            }
         }
 
         return current;
