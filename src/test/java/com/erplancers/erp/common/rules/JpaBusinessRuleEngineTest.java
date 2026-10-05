@@ -129,12 +129,12 @@ class JpaBusinessRuleEngineTest {
         Attribute<RootEntity, ?> total = mock(Attribute.class);
         when(total.getName()).thenReturn("total");
         when(total.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
-        when(total.getJavaType()).thenReturn(BigDecimal.class);
+        when(total.getJavaType()).thenReturn((Class) BigDecimal.class);
 
         Attribute<RootEntity, ?> totalCost = mock(Attribute.class);
         when(totalCost.getName()).thenReturn("totalCost");
         when(totalCost.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
-        when(totalCost.getJavaType()).thenReturn(BigDecimal.class);
+        when(totalCost.getJavaType()).thenReturn((Class) BigDecimal.class);
 
         when(rootType.getAttribute("approved")).thenReturn((Attribute) approved);
         when(rootType.getAttribute("total")).thenReturn((Attribute) total);
@@ -154,12 +154,12 @@ class JpaBusinessRuleEngineTest {
         Attribute<LineEntity, ?> product = mock(Attribute.class);
         when(product.getName()).thenReturn("product");
         when(product.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.MANY_TO_ONE);
-        when(product.getJavaType()).thenReturn(ProductEntity.class);
+        when(product.getJavaType()).thenReturn((Class) ProductEntity.class);
 
         Attribute<ProductEntity, ?> cost = mock(Attribute.class);
         when(cost.getName()).thenReturn("cost");
         when(cost.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
-        when(cost.getJavaType()).thenReturn(BigDecimal.class);
+        when(cost.getJavaType()).thenReturn((Class) BigDecimal.class);
 
         when(rootType.getAttribute("lines")).thenReturn((Attribute) plural);
         when(lineType.getAttribute("product")).thenReturn((Attribute) product);
