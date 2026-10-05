@@ -49,7 +49,8 @@ function suggestionList(paths: string[], query: string) {
 }
 
 export function BusinessRulesPage() {
-  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);\n  const [expressionSuggestions, setExpressionSuggestions] = useState<string[]>([]);
+  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);
+  const [expressionSuggestions, setExpressionSuggestions] = useState<string[]>([]);
   const { credentials } = useAuth();
   const [resource, setResource] = useState("");
   const [relationDepth, setRelationDepth] = useState(3);
