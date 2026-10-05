@@ -48,7 +48,8 @@ function suggestionList(paths: string[], query: string) {
   return paths.filter(path => !q || path.toLowerCase().includes(q)).slice(0, 50);
 }
 
-export function BusinessRulesPage() {\n  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);\n  const [expressionSuggestions, setExpressionSuggestions] = useState<string[]>([]);
+export function BusinessRulesPage() {
+  const [pathSuggestions, setPathSuggestions] = useState<string[]>([]);\n  const [expressionSuggestions, setExpressionSuggestions] = useState<string[]>([]);
   const { credentials } = useAuth();
   const [resource, setResource] = useState("");
   const [relationDepth, setRelationDepth] = useState(3);
@@ -255,10 +256,8 @@ export function BusinessRulesPage() {\n  const [pathSuggestions, setPathSuggesti
                             Condition path
                             <AutoComplete
                               value={rule.condition.path}
-                              suggestions={paths}
-                              completeMethod={e => {
-                                updateCondition(ruleIndex, { path: e.query ? suggestionList(paths, e.query)[0] ?? "" : paths.slice(0, 50) });
-                              }}
+                              suggestions={pathSuggestions}
+                              completeMethod={e => setPathSuggestions(suggestionList(paths, e.query))}
                               onChange={e => updateCondition(ruleIndex, { path: e.value })}
                               dropdown
                               forceSelection={false}
@@ -297,8 +296,8 @@ export function BusinessRulesPage() {\n  const [pathSuggestions, setPathSuggesti
                               <label className="flex flex-column gap-2">Target
                                 <AutoComplete
                                   value={action.target}
-                                  suggestions={paths}
-                                  completeMethod={e => setRules(previous => previous)}
+                                  suggestions={pathSuggestions}
+                                  completeMethod={e => setPathSuggestions(suggestionList(paths, e.query))}
                                   onChange={e => updateAction(ruleIndex, actionIndex, { target: e.value })}
                                   dropdown
                                   placeholder="Root writable field"
@@ -309,7 +308,7 @@ export function BusinessRulesPage() {\n  const [pathSuggestions, setPathSuggesti
                               <label className="flex flex-column gap-2">Expression
                                 <AutoComplete
                                   value={action.expression}
-                                  suggestions={expressionTokens}
+                                  suggestions={expressionSuggestions}
                                   completeMethod={e => setExpressionSuggestions(suggestionList(expressionTokens, e.query))}
                                   onChange={e => updateAction(ruleIndex, actionIndex, { expression: e.value })}
                                   dropdown
