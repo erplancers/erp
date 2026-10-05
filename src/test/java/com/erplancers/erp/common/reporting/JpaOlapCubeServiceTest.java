@@ -229,7 +229,7 @@ class JpaOlapCubeServiceTest {
                                         "lines", TestEntity.class.getName(), "ONE_TO_MANY"),
                                 new EntityDataAnalysisService.FieldSchema(
                                         "lines.productName", String.class.getName(), "BASIC")
-                        )));
+                        ))));
     }
 
     private OlapAnalysisEngine.CubeResult emptyResult() {
