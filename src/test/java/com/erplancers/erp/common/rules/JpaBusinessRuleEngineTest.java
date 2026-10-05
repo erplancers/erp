@@ -124,7 +124,7 @@ class JpaBusinessRuleEngineTest {
         Attribute<RootEntity, ?> approved = mock(Attribute.class);
         when(approved.getName()).thenReturn("approved");
         when(approved.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
-        when(approved.getJavaType()).thenReturn(boolean.class);
+        when(approved.getJavaType()).thenReturn((Class) boolean.class);
 
         Attribute<RootEntity, ?> total = mock(Attribute.class);
         when(total.getName()).thenReturn("total");
