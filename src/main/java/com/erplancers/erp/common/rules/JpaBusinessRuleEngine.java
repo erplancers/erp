@@ -253,10 +253,12 @@ public class JpaBusinessRuleEngine {
     }
 
     private void validateExpressionPaths(String resource, String expression) {
-        String cleaned = expression.replaceAll("[+\\-*/()]", " ");
+        String cleaned = expression.replaceAll("[+\\-*/(),]", " ");
+        Set<String> functions = Set.of("SUM", "AVG", "MIN", "MAX", "COUNT");
         for (String token : cleaned.split("\\s+")) {
             if (token.isBlank() || token.matches("[0-9.]+") || token.equalsIgnoreCase("null")) continue;
             if (token.equalsIgnoreCase("true") || token.equalsIgnoreCase("false")) continue;
+            if (functions.contains(token.toUpperCase(Locale.ROOT))) continue;
             if (token.matches("[A-Za-z_][A-Za-z0-9_.]*")) validatePath(resource, token);
         }
     }
