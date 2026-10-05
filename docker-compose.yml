@@ -1,18 +1,37 @@
 services:
-  postgres:
-    image: postgres:17-alpine
+  doris-fe:
+    image: apache/doris:fe-3.0.7
     restart: unless-stopped
+    hostname: doris-fe
     environment:
-      POSTGRES_DB: erplancers
-      POSTGRES_USER: erplancers
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      FE_SERVERS: fe1:doris-fe:9010
+      FE_ID: "1"
+    ports:
+      - "8030:8030"
+      - "9030:9030"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U erplancers -d erplancers"]
+      test: ["CMD-SHELL", "mysql -h 127.0.0.1 -P 9030 -uroot -e 'SELECT 1' >/dev/null 2>&1"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
+    volumes:
+      - doris_fe_data:/opt/apache-doris/fe/doris-meta
+      - doris_fe_log:/opt/apache-doris/fe/log
+    networks: [erp]
+
+  doris-be:
+    image: apache/doris:be-3.0.7
+    restart: unless-stopped
+    hostname: doris-be
+    environment:
+      FE_SERVERS: fe1:doris-fe:9010
+      BE_ADDR: doris-be:9050
+    depends_on:
+      doris-fe:
+        condition: service_healthy
+    volumes:
+      - doris_be_storage:/opt/apache-doris/be/storage
+      - doris_be_log:/opt/apache-doris/be/log
     networks: [erp]
 
   backend:
@@ -22,16 +41,19 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: docker
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/erplancers
-      SPRING_DATASOURCE_USERNAME: erplancers
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      SPRING_DATASOURCE_URL: jdbc:mysql://doris-fe:9030/erplancers?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ""
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect
       SPRING_SESSION_JDBC_INITIALIZE_SCHEMA: always
       ERP_REGISTRATION_ADMIN_TOKEN: ${ERP_REGISTRATION_ADMIN_TOKEN:?Set ERP_REGISTRATION_ADMIN_TOKEN in .env}
       SERVER_FORWARD_HEADERS_STRATEGY: framework
     depends_on:
-      postgres:
+      doris-fe:
         condition: service_healthy
+      doris-be:
+        condition: service_started
     networks: [erp]
 
   frontend:
@@ -46,7 +68,10 @@ services:
     networks: [erp]
 
 volumes:
-  postgres_data:
+  doris_fe_data:
+  doris_fe_log:
+  doris_be_storage:
+  doris_be_log:
 
 networks:
   erp:
