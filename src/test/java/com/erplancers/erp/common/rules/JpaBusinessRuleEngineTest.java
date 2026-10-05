@@ -121,6 +121,25 @@ class JpaBusinessRuleEngineTest {
         ManagedType<LineEntity> lineType = mock(ManagedType.class);
         ManagedType<ProductEntity> productType = mock(ManagedType.class);
 
+        Attribute<RootEntity, ?> approved = mock(Attribute.class);
+        when(approved.getName()).thenReturn("approved");
+        when(approved.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
+        when(approved.getJavaType()).thenReturn(boolean.class);
+
+        Attribute<RootEntity, ?> total = mock(Attribute.class);
+        when(total.getName()).thenReturn("total");
+        when(total.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
+        when(total.getJavaType()).thenReturn(BigDecimal.class);
+
+        Attribute<RootEntity, ?> totalCost = mock(Attribute.class);
+        when(totalCost.getName()).thenReturn("totalCost");
+        when(totalCost.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.BASIC);
+        when(totalCost.getJavaType()).thenReturn(BigDecimal.class);
+
+        when(rootType.getAttribute("approved")).thenReturn((Attribute) approved);
+        when(rootType.getAttribute("total")).thenReturn((Attribute) total);
+        when(rootType.getAttribute("totalCost")).thenReturn((Attribute) totalCost);
+
         Attribute<RootEntity, ?> lines = mock(Attribute.class);
         when(lines.getName()).thenReturn("lines");
         when(lines.getPersistentAttributeType()).thenReturn(Attribute.PersistentAttributeType.ONE_TO_MANY);
