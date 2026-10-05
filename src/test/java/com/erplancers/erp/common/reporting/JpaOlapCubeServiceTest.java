@@ -62,7 +62,6 @@ class JpaOlapCubeServiceTest {
         when(olap.cube(eq("sales-order"), any(OlapAnalysisEngine.CubeRequest.class)))
                 .thenReturn(emptyResult());
 
-        JpaOlapCubeService.OlapAnalysisEngineResult unused = null;
         JpaOlapCubeService.AutoCubeQueryRequest request =
                 new JpaOlapCubeService.AutoCubeQueryRequest(
                         List.of("customer"),
