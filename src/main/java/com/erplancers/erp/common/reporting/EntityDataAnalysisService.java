@@ -124,6 +124,13 @@ public class EntityDataAnalysisService {
                             || attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_ONE) {
                         ManagedType<?> target = entityManager.getMetamodel()
                                 .managedType(attribute.getJavaType());
+                        // The relationship itself is a valid OLAP dimension. The
+                        // aggregation engine resolves terminal relationships to
+                        // the target entity identifier for GROUP BY operations.
+                        fields.add(new FieldSchema(
+                                name,
+                                attribute.getJavaType().getName(),
+                                attribute.getPersistentAttributeType().name()));
                         collectBiFields(target, name, depth + 1, relationDepth, new HashSet<>(visited), fields);
                     } else if (attribute instanceof PluralAttribute<?, ?, ?> plural
                             && (attribute.getPersistentAttributeType() == Attribute.PersistentAttributeType.ONE_TO_MANY
@@ -131,6 +138,13 @@ public class EntityDataAnalysisService {
                         Class<?> elementType = plural.getElementType().getJavaType();
                         if (EntityBase.class.isAssignableFrom(elementType)) {
                             ManagedType<?> target = entityManager.getMetamodel().managedType(elementType);
+                            // Collection relationships are also valid dimensions.
+                            // The Java type recorded here is the related entity
+                            // type rather than java.util.Collection.
+                            fields.add(new FieldSchema(
+                                    name,
+                                    elementType.getName(),
+                                    attribute.getPersistentAttributeType().name()));
                             collectBiFields(target, name, depth + 1, relationDepth, new HashSet<>(visited), fields);
                         }
                     }
