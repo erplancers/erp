@@ -48,5 +48,8 @@ export const api={
  olapDrilldown:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/resources/${encodeURIComponent(slug)}/drilldown`,c,{method:"POST",body:JSON.stringify(body)}),
  autoOlapCubes:(c:Credentials,relationDepth=2)=>apiFetch<import("./types").AutoOlapCatalog>(`/bi/olap/cubes?relationDepth=${relationDepth}`,c),
  autoOlapRelations:(slug:string,relation:string,c:Credentials,relationDepth=2)=>apiFetch<import("./types").AutoOlapRelationDiscovery>(`/bi/olap/cubes/${encodeURIComponent(slug)}/relations?relation=${encodeURIComponent(relation)}&relationDepth=${relationDepth}`,c),
- autoOlapQuery:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/cubes/${encodeURIComponent(slug)}/query`,c,{method:"POST",body:JSON.stringify(body)})
+ autoOlapQuery:(slug:string,body:object,c:Credentials)=>apiFetch<any>(`/bi/olap/cubes/${encodeURIComponent(slug)}/query`,c,{method:"POST",body:JSON.stringify(body)}),
+ businessRuleSchema:(resource:string,c:Credentials,relationDepth=3)=>apiFetch<import("./types").BusinessRuleSchema>(`/business-rules/schema/${encodeURIComponent(resource)}?relationDepth=${relationDepth}`,c),
+ evaluateBusinessRule:(resource:string,id:number,ruleset:import("./types").BusinessRuleSet,c:Credentials)=>apiFetch<any>(`/business-rules/resources/${encodeURIComponent(resource)}/${id}/evaluate`,c,{method:"POST",body:JSON.stringify(ruleset)}),
+ executeBusinessRule:(resource:string,id:number,ruleset:import("./types").BusinessRuleSet,c:Credentials)=>apiFetch<any>(`/business-rules/resources/${encodeURIComponent(resource)}/${id}/execute`,c,{method:"POST",body:JSON.stringify(ruleset)})
 };
