@@ -268,7 +268,7 @@ public class JpaOlapCubeService {
 
         schema.fields().stream()
                 .map(EntityDataAnalysisService.FieldSchema::name)
-                .forEach(field -> measures.add("countDistinct:" + field));
+                .forEach(field -> measures.add("countDistinct:" + field.name()));
 
         Set<String> relationships = schema.fields().stream()
                 .map(EntityDataAnalysisService.FieldSchema::name)
