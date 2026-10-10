@@ -155,3 +155,43 @@ export interface BiReportDelivery {
   errorMessage?: string | null;
   createdAt: string;
 }
+
+export interface CreateAnalyticsScheduleRequest {
+  tenantId: string;
+  modelName: string;
+  scheduleType: "RETRAIN" | "BATCH_SCORE";
+  jobType: string;
+  cronExpression: string;
+  timezone: string;
+  datasetKey: string;
+  parameters: Record<string, unknown>;
+}
+export interface AnalyticsModelSchedule {
+  id: string;
+  tenantId: string;
+  modelName: string;
+  createdBy: string;
+  scheduleType: string;
+  jobType: string;
+  cronExpression: string;
+  timezone: string;
+  datasetKey: string;
+  parametersJson: string;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AnalyticsModelEvaluation {
+  id: string;
+  tenantId: string;
+  modelName: string;
+  modelVersion: number;
+  evaluationType: string;
+  metricsJson: string;
+  sampleSize: number;
+  datasetSnapshot?: string | null;
+  evaluatedBy: string;
+  createdAt: string;
+}
