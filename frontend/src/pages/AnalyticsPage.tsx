@@ -150,7 +150,7 @@ function SparkMlOperations() {
   });
   const models = useQuery({
     queryKey: ["spark-analytics-models", tenantId, credentials?.username],
-    queryFn: () => api.analyticsModels(tenantId.trim(), credentials!, selectedModelName || undefined),
+    queryFn: () => api.analyticsModels(tenantId.trim(), credentials!),
     enabled: Boolean(credentials && tenantId.trim())
   });
   const experiments = useQuery({
@@ -165,6 +165,10 @@ function SparkMlOperations() {
   });
 
   const availableJobs = useMemo(() => (DATASET_JOBS[datasetKey] || []).map(value => ({ label: value, value })), [datasetKey]);
+  const visibleModels = useMemo(
+    () => (models.data || []).filter(model => !selectedModelName || model.modelName === selectedModelName),
+    [models.data, selectedModelName]
+  );
 
   const submit = useMutation({
     mutationFn: (request: AnalyticsJobSubmitRequest) => api.submitAnalyticsJob(request, credentials!),
@@ -329,7 +333,7 @@ function SparkMlOperations() {
         </div>
         {models.isError && <Message severity="error" text={errorText(models.error)} />}
         {models.isLoading ? <ProgressSpinner /> : (
-          <DataTable value={models.data || []} dataKey="id" paginator rows={6} size="small" emptyMessage="No model versions visible for this tenant/account.">
+          <DataTable value={visibleModels} dataKey="id" paginator rows={6} size="small" emptyMessage="No model versions visible for this tenant/account.">
             <Column field="modelName" header="Model" />
             <Column field="version" header="Version" />
             <Column field="status" header="Lifecycle" body={(row: AnalyticsModelView) => <Tag value={row.status} severity={statusSeverity(row.status)} />} />
