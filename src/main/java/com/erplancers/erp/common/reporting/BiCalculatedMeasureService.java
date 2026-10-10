@@ -54,14 +54,21 @@ public class BiCalculatedMeasureService {
                     || !ALIAS.matcher(comparison.name()).matches()) {
                 throw new IllegalArgumentException("Invalid period comparison identifier");
             }
-            for (Map<String, Object> row : result) {
+            for (int index = 0; index < result.size(); index++) {
+                Map<String, Object> row = result.get(index);
                 BigDecimal current = decimal(row.get(comparison.currentMeasure()));
-                BigDecimal previous = decimal(row.get(comparison.previousMeasure()));
+                boolean previousRowMode = "PREVIOUS_PERIOD".equalsIgnoreCase(comparison.previousMeasure())
+                        || "PREVIOUS".equalsIgnoreCase(comparison.previousMeasure());
+                BigDecimal previous = previousRowMode
+                        ? index == 0 ? null : decimal(result.get(index - 1).get(comparison.currentMeasure()))
+                        : decimal(row.get(comparison.previousMeasure()));
                 if (current == null || previous == null) {
+                    row.put(comparison.name() + "_previous", previous);
                     row.put(comparison.name() + "_change", null);
                     row.put(comparison.name() + "_change_pct", null);
                 } else {
                     BigDecimal delta = current.subtract(previous);
+                    row.put(comparison.name() + "_previous", previous);
                     row.put(comparison.name() + "_change", delta);
                     row.put(comparison.name() + "_change_pct",
                             previous.signum() == 0 ? null
