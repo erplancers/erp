@@ -58,7 +58,7 @@ public final class ModelMonitoring {
             Dataset<Row> c = current.filter(functions.col(feature).isNotNull());
             long bn = b.count(), cn = c.count();
             if (bn == 0 || cn == 0) {
-                result.add(new DriftMetric(feature, Double.NaN, "INSUFFICIENT_DATA", bn, cn));
+                result.add(new DriftMetric(feature, 0.0, "INSUFFICIENT_DATA", bn, cn));
                 continue;
             }
             double psi = 0.0;
