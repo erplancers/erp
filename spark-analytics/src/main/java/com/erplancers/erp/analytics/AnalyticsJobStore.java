@@ -208,7 +208,8 @@ public final class AnalyticsJobStore {
                         """)) {
                     ps.setString(1, id); ps.setString(2, job.tenantId()); ps.setString(3, modelName);
                     ps.setInt(4, version); ps.setString(5, artifactUri);
-                    ps.setString(6, manifestJson); ps.setString(7, metricsJson); ps.executeUpdate();
+                    ps.setString(6, manifestJson); ps.setString(7, metricsJson);
+                    ps.setString(8, job.requestedBy()); ps.executeUpdate();
                 }
                 c.commit();
                 return new ModelVersion(id, job.tenantId(), modelName, version, "CANDIDATE", artifactUri, manifestJson, metricsJson);
