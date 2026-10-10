@@ -305,4 +305,36 @@ public final class AnalyticsJobStore {
             ps.executeUpdate();
         }
     }
+
+    public ModelVersion findModelVersion(String tenantId, String modelName, int version) throws SQLException {
+        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("""
+                SELECT id, tenant_id, model_name, version, status, artifact_uri, manifest_json, metrics_json
+                FROM analytics_model_version
+                WHERE tenant_id = ? AND model_name = ? AND version = ?
+                """)) {
+            ps.setString(1, tenantId); ps.setString(2, modelName); ps.setInt(3, version);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                return new ModelVersion(rs.getString("id"), rs.getString("tenant_id"), rs.getString("model_name"),
+                        rs.getInt("version"), rs.getString("status"), rs.getString("artifact_uri"),
+                        rs.getString("manifest_json"), rs.getString("metrics_json"));
+            }
+        }
+    }
+
+    public void recordDrift( Job job, AnalyticsJobHandler.DriftObservation observation) throws SQLException {
+        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("""
+                INSERT INTO analytics_drift_metric
+                  (tenant_id, model_name, model_version, feature_name, population_stability_index,
+                   sample_size, baseline_snapshot, current_snapshot, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """)) {
+            ps.setString(1, job.tenantId()); ps.setString(2, observation.modelName());
+            ps.setInt(3, observation.modelVersion()); ps.setString(4, observation.feature());
+            ps.setDouble(5, observation.psi()); ps.setLong(6, observation.currentRows());
+            ps.setString(7, observation.baselineSnapshot()); ps.setString(8, observation.currentSnapshot());
+            ps.setString(9, observation.status()); ps.executeUpdate();
+        }
+    }
+
 }
