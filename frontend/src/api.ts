@@ -61,8 +61,7 @@ export const api={
  analyticsDrift:(tenantId:string,c:Credentials,modelName?:string)=>apiFetch<import("./types").AnalyticsDriftView[]>(`/analytics/drift?tenantId=${encodeURIComponent(tenantId)}${modelName?`&modelName=${encodeURIComponent(modelName)}`:""}`,c),
  reviewAnalyticsModel:(tenantId:string,name:string,version:number,approved:boolean,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/review?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({approved,note})}),
  promoteAnalyticsModel:(tenantId:string,name:string,version:number,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/promote?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({note})}),
- rollbackAnalyticsModel:(tenantId:string,name:string,version:number,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/rollback?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({note})})
-
+ rollbackAnalyticsModel:(tenantId:string,name:string,version:number,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/rollback?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({note})}),
  biCachedQuery:(slug:string,body:object,c:Credentials)=>apiFetch<{report:BiReport;cached:boolean;cachedAt:string}>(`/bi/resources/${encodeURIComponent(slug)}/query/cached`,c,{method:"POST",body:JSON.stringify(body)}),
  savedBiReports:(c:Credentials)=>apiFetch<import("./types").SavedBiReport[]>("/bi/reports",c),
  saveBiReport:(body:object,c:Credentials)=>apiFetch<import("./types").SavedBiReport>("/bi/reports",c,{method:"POST",body:JSON.stringify(body)}),
