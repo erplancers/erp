@@ -64,7 +64,8 @@ public final class AnalyticsDatasetCatalog {
                 projections.add(new Projection(pieces[0], pieces[1]));
             }
             if (projections.isEmpty()) throw new IllegalArgumentException("Dataset must select columns: " + key);
-            if (aliases.contains("password") || aliases.contains("secret") || aliases.contains("access_token")) {
+            Set<String> prohibitedAliases = Set.of("password", "secret", "access_token", "refresh_token", "private_key", "api_key");
+            if (aliases.stream().map(a -> a.toLowerCase(Locale.ROOT)).anyMatch(prohibitedAliases::contains)) {
                 throw new IllegalArgumentException("Credential-bearing columns are prohibited from analytics extracts");
             }
             result.put(key, new DatasetDefinition(key, table, projections, tenantColumn, scopeColumn, scopeType));
