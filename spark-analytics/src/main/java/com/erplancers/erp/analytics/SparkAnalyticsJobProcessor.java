@@ -276,7 +276,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                         Dataset<Row> raw = scoringModel.transform(rawInput);
                         scoringInput = raw.withColumn("overdue_risk_score",
                                         org.apache.spark.ml.functions.vector_to_array(
-                                                org.apache.spark.sql.functions.col("probability")).getItem(1))
+                                                org.apache.spark.sql.functions.col("probability"), "float64").getItem(1))
                                 .withColumn("human_review_required", org.apache.spark.sql.functions.col("overdue_risk_score").geq(reviewThreshold))
                                 .withColumn("recommended_action", org.apache.spark.sql.functions.lit("HUMAN_REVIEW_ONLY"))
                                 .drop("features", "rawPrediction", "probability", "prediction");
