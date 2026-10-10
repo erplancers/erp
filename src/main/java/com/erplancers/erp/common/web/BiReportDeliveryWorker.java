@@ -53,7 +53,7 @@ public class BiReportDeliveryWorker {
         if (delivery == null) return;
         long started = System.nanoTime();
         try {
-            Detail detail = loadDetail(delivery.id());
+            Detail detail = loadDetail(delivery);
             if (detail == null) throw new IllegalStateException("Scheduled report or schedule no longer exists");
             Integer grant = jdbc.queryForObject("""
                     SELECT COUNT(*) FROM analytics_tenant_grant
@@ -123,7 +123,7 @@ public class BiReportDeliveryWorker {
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
-    private Detail loadDetail(String id) {
+    private Detail loadDetail(Delivery delivery) {
         List<Detail> rows = jdbc.query("""
                 SELECT r.owner_username, r.name, r.resource_slug, r.definition_json,
                        s.recipients_json, s.export_format
@@ -133,8 +133,7 @@ public class BiReportDeliveryWorker {
                  WHERE d.id = ? AND d.tenant_id = ?
                 """, (rs, row) -> new Detail(rs.getString("owner_username"), rs.getString("name"),
                 rs.getString("resource_slug"), rs.getString("definition_json"),
-                rs.getString("recipients_json"), rs.getString("export_format")), id,
-                jdbc.queryForObject("SELECT tenant_id FROM bi_report_delivery WHERE id = ?", String.class, id));
+                rs.getString("recipients_json"), rs.getString("export_format")), delivery.id(), delivery.tenantId());
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
