@@ -22,7 +22,7 @@ import static org.apache.spark.sql.functions.lit;
 public final class ReceivablesRiskModel {
     private ReceivablesRiskModel() {}
 
-    public record Result(PipelineModel model, Dataset<Row> reviewQueue,
+    public record Result(PipelineModel model, Dataset<Row> reviewQueue, Dataset<Row> baselineFeatures,
                          double areaUnderRoc, long trainingRows, long validationRows,
                          double reviewThreshold) {}
 
@@ -60,6 +60,7 @@ public final class ReceivablesRiskModel {
                 .withColumn("recommended_action", lit("HUMAN_REVIEW_ONLY"))
                 .drop("features", "rawPrediction", "probability");
         model.write().overwrite().save(versionedModelPath);
-        return new Result(model, reviewQueue, auc, trainRows, validationRows, reviewThreshold);
+        return new Result(model, reviewQueue, split[0].select(numericFeatures.toArray(String[]::new)),
+                auc, trainRows, validationRows, reviewThreshold);
     }
 }
