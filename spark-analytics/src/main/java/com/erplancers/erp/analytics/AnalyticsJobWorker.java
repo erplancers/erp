@@ -33,6 +33,9 @@ public final class AnalyticsJobWorker {
             context.checkCancellation();
             store.recordExperiment(job, result.algorithm(), result.parametersJson(),
                     result.metricsJson(), result.inputSnapshot(), "SUCCEEDED");
+            for (AnalyticsJobHandler.DriftObservation drift : result.driftObservations()) {
+                store.recordDrift(job, drift);
+            }
             if (result.artifactUri() != null && !result.artifactUri().isBlank()) {
                 store.registerCandidate(job, job.jobType().toLowerCase(java.util.Locale.ROOT),
                         result.artifactUri(), result.manifestJson(), result.metricsJson());
