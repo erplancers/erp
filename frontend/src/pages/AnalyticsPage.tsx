@@ -14,6 +14,7 @@ import { Tag } from "primereact/tag";
 import { TabView, TabPanel } from "primereact/tabview";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { RetrainingPoliciesPanel } from "../components/RetrainingPoliciesPanel";
 import type {
   AnalyticsJobView, AnalyticsModelView, AnalyticsJobSubmitRequest
 } from "../types";
@@ -326,6 +327,8 @@ function SparkMlOperations() {
           </DataTable>
         )}
       </Card>
+
+      <RetrainingPoliciesPanel tenantId={tenantId} />
 
       <Card title="Model registry" subTitle="Candidate → validated → production; promotion and rollback require separate ERP policy permissions.">
         <div style={{ display: "flex", flexWrap: "wrap", gap: ".5rem", alignItems: "center", marginBottom: ".75rem" }}>
