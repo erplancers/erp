@@ -32,13 +32,13 @@ public class AnalyticsJobController {
     private static final Set<String> SUPPORTED_JOBS = Set.of(
             "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
-            "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT");
+            "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
-                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET", "DATA_DRIFT")),
-            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT")),
+                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET", "DATA_DRIFT", "MODEL_SCORING")),
+            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
-            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT")));
+            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.of(
             "RFM", Set.of("asOfDate"),
             "COHORT_ANALYSIS", Set.of(),
@@ -49,7 +49,8 @@ public class AnalyticsJobController {
             "INVENTORY_ANOMALY", Set.of("zThreshold"),
             "MARKET_BASKET", Set.of("minSupport", "minConfidence"),
             "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate"),
-            "DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate"));
+            "DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate"),
+            "MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold"));
 
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
