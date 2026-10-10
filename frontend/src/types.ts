@@ -21,3 +21,61 @@ export interface BusinessRuleCondition { path:string; operator:string; value:unk
 export interface BusinessRuleAction { type:string; target:string; expression:string; message:string; }
 export interface BusinessRule { name:string; priority:number; condition:BusinessRuleCondition; actions:BusinessRuleAction[]; }
 export interface BusinessRuleSet { name:string; entity:string; trigger:string; rules:BusinessRule[]; }
+
+
+export interface AnalyticsJobView {
+  id: string;
+  tenantId: string;
+  jobType: string;
+  datasetKey: string;
+  status: "QUEUED" | "RUNNING" | "CANCEL_REQUESTED" | "SUCCEEDED" | "FAILED" | "CANCELLED" | string;
+  attemptCount: number;
+  maxAttempts: number;
+  resultJson?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AnalyticsModelView {
+  id: string;
+  tenantId: string;
+  modelName: string;
+  version: number;
+  status: "CANDIDATE" | "VALIDATED" | "PRODUCTION" | "RETIRED" | "REJECTED" | string;
+  artifactUri: string;
+  manifestJson: string;
+  metricsJson: string;
+  createdAt: string;
+  promotedAt?: string | null;
+  promotedBy?: string | null;
+}
+export interface AnalyticsExperimentView {
+  id: string;
+  runName: string;
+  algorithm: string;
+  parametersJson: string;
+  metricsJson: string;
+  inputSnapshot?: string | null;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+}
+export interface AnalyticsDriftView {
+  id: number;
+  modelName: string;
+  modelVersion: number;
+  featureName: string;
+  psi: number;
+  sampleSize: number;
+  baselineSnapshot?: string | null;
+  currentSnapshot?: string | null;
+  measuredAt: string;
+  status: string;
+}
+export interface AnalyticsJobSubmitRequest {
+  tenantId: string;
+  datasetKey: string;
+  jobType: string;
+  parameters: Record<string, unknown>;
+  idempotencyKey?: string;
+}
