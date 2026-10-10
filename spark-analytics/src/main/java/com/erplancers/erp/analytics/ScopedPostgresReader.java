@@ -115,7 +115,7 @@ public final class ScopedPostgresReader {
             int count = 0;
             try (ResultSet rows = statement.executeQuery()) {
                 while (rows.next()) {
-                    canonical.append(rows.getString(1)).append('\\n');
+                    canonical.append(rows.getString(1)).append('\n');
                     count++;
                 }
             }
