@@ -47,6 +47,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         Map<String, Object> metrics = new LinkedHashMap<>();
         String algorithm = job.jobType();
         String modelPath = null;
+        String candidateArtifactUri = null;
         String baselinePath = null;
         List<String> modelFeatureColumns = List.of();
         List<DriftObservation> driftObservations = List.of();
@@ -190,6 +191,95 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("modelPath", modelPath);
                 algorithm = "overdue-payment-logistic-regression-human-review";
             }
+            case "MODEL_SCORING" -> {
+                String modelName = requiredString(p, "modelName");
+                int version = intParameter(p, "modelVersion", 1, 1, Integer.MAX_VALUE);
+                AnalyticsJobStore.ModelVersion registered = store.findModelVersion(job.tenantId(), modelName, version);
+                if (registered == null || !"PRODUCTION".equals(registered.status())) {
+                    throw new IllegalArgumentException("Scoring requires a PRODUCTION model version in this tenant");
+                }
+                JsonNode manifestNode = json.readTree(registered.manifestJson());
+                if (!job.datasetKey().equals(manifestNode.path("datasetKey").asText())) {
+                    throw new SecurityException("Dataset key does not match model training dataset");
+                }
+                String configuredProjections = definition.projections().stream()
+                        .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
+                        .collect(Collectors.joining(","));
+                if (!definition.table().equals(manifestNode.path("sourceTable").asText(""))
+                        || !configuredProjections.equals(manifestNode.path("sourceProjections").asText(""))) {
+                    throw new SecurityException("Approved source mapping changed since model training");
+                }
+                if (!scopeFingerprint.equals(manifestNode.path("scopeFingerprint").asText())) {
+                    throw new SecurityException("Current tenant/entity grants differ from the model's training scope");
+                }
+                String tenantArtifactPrefix = artifactRoot + "/" + safeSegment(job.tenantId()) + "/";
+                if (registered.artifactUri() == null || !registered.artifactUri().startsWith(tenantArtifactPrefix)) {
+                    throw new SecurityException("Model artifact is outside this tenant's protected artifact namespace");
+                }
+                modelPath = registered.artifactUri();
+                org.apache.spark.ml.PipelineModel scoringModel = org.apache.spark.ml.PipelineModel.load(modelPath);
+                List<String> features = readStringArray(manifestNode.path("featureColumns").toString());
+                double reviewThreshold = doubleParameter(p, "reviewThreshold", 0.65, 0.0, 1.0);
+                Dataset<Row> scoringInput;
+                switch (modelName) {
+                    case "customer_segmentation" -> {
+                        Dataset<Row> rfm = SalesIntelligence.rfm(source, "customer_id", "order_id",
+                                "order_date", "net_amount", dateParameter(p, "asOfDate"));
+                        requireAliases(rfm, features);
+                        scoringInput = scoringModel.transform(rfm).select("customer_id", "segment");
+                        algorithm = "customer-segmentation-batch-scoring";
+                    }
+                    case "demand_forecast" -> {
+                        Dataset<Row> featureFrame = InventoryMining.demandFeatureFrame(source,
+                                "product_id", "warehouse_id", "demand_date", "demand_qty");
+                        requireAliases(featureFrame, features);
+                        scoringInput = scoringModel.transform(featureFrame)
+                                .withColumn("forecast_demand", org.apache.spark.sql.functions.greatest(
+                                        org.apache.spark.sql.functions.col("prediction"), org.apache.spark.sql.functions.lit(0.0)))
+                                .select("product_id", "warehouse_id", "demand_date", "forecast_demand");
+                        algorithm = "demand-forecast-batch-scoring";
+                    }
+                    case "stockout_risk" -> {
+                        requireAliases(source, features);
+                        java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>(
+                                List.of("product_id", "warehouse_id", "demand_date"));
+                        selected.addAll(features);
+                        scoringInput = source.select(selected.iterator().next(),
+                                selected.stream().skip(1).toArray(String[]::new));
+                        Dataset<Row> raw = scoringModel.transform(scoringInput);
+                        scoringInput = raw.withColumn("stockout_risk_score",
+                                        org.apache.spark.ml.functions.vector_to_array(
+                                                org.apache.spark.sql.functions.col("probability")).getItem(1))
+                                .withColumn("human_review_required", org.apache.spark.sql.functions.col("stockout_risk_score").geq(0.65))
+                                .withColumn("recommended_action", org.apache.spark.sql.functions.lit("REVIEW_INVENTORY"))
+                                .drop("features", "rawPrediction", "probability", "prediction");
+                        algorithm = "stockout-risk-batch-scoring";
+                    }
+                    case "receivables_risk" -> {
+                        requireAliases(source, features);
+                        java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>(
+                                List.of("invoice_id", "customer_id", "due_date"));
+                        selected.addAll(features);
+                        Dataset<Row> rawInput = source.select(selected.iterator().next(),
+                                selected.stream().skip(1).toArray(String[]::new));
+                        Dataset<Row> raw = scoringModel.transform(rawInput);
+                        scoringInput = raw.withColumn("overdue_risk_score",
+                                        org.apache.spark.ml.functions.vector_to_array(
+                                                org.apache.spark.sql.functions.col("probability")).getItem(1))
+                                .withColumn("human_review_required", org.apache.spark.sql.functions.col("overdue_risk_score").geq(reviewThreshold))
+                                .withColumn("recommended_action", org.apache.spark.sql.functions.lit("HUMAN_REVIEW_ONLY"))
+                                .drop("features", "rawPrediction", "probability", "prediction");
+                        algorithm = "receivables-risk-batch-scoring-human-review";
+                    }
+                    default -> throw new IllegalArgumentException("Model is not eligible for pipeline scoring: " + modelName);
+                }
+                outputPath = write(scoringInput, output + "/model-scoring");
+                metrics.put("modelName", modelName);
+                metrics.put("modelVersion", version);
+                metrics.put("rowsScored", scoringInput.count());
+                metrics.put("outputPath", outputPath);
+                metrics.put("decisionPolicy", modelName.equals("receivables_risk") ? "HUMAN_REVIEW_ONLY" : "REVIEW_REQUIRED_FOR_ACTION");
+            }
             case "DATA_DRIFT" -> {
                 String modelName = requiredString(p, "modelName");
                 int version = intParameter(p, "modelVersion", 1, 1, Integer.MAX_VALUE);
@@ -252,6 +342,9 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         }
 
         context.checkCancellation();
+        if (Set.of("CUSTOMER_SEGMENTATION", "DEMAND_FORECAST", "STOCKOUT_RISK", "RECEIVABLES_RISK").contains(job.jobType())) {
+            candidateArtifactUri = modelPath;
+        }
         String manifest = json.writeValueAsString(Map.ofEntries(
                 Map.entry("modelType", algorithm), Map.entry("jobId", job.id()),
                 Map.entry("tenantId", job.tenantId()), Map.entry("createdBy", job.requestedBy()),
@@ -269,7 +362,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 "outputPath", outputPath, "modelPath", modelPath == null ? "" : modelPath,
                 "humanReviewRequired", job.jobType().equals("RECEIVABLES_RISK")));
         return new JobResult(resultJson, algorithm, job.parametersJson(), json.writeValueAsString(metrics),
-                inputEvidence, modelPath, manifest, driftObservations);
+                inputEvidence, candidateArtifactUri, manifest, driftObservations);
     }
 
     private static String write(Dataset<Row> dataset, String path) {
