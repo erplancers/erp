@@ -26,10 +26,10 @@ const NUMERIC_TYPES = new Set([
 ]);
 
 const DATASET_JOBS: Record<string, string[]> = {
-  sales_orders: ["RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "DATA_DRIFT"],
-  inventory_daily: ["DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT"],
+  sales_orders: ["RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "DATA_DRIFT", "MODEL_SCORING"],
+  inventory_daily: ["DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING"],
   order_lines: ["MARKET_BASKET"],
-  receivables: ["RECEIVABLES_RISK", "DATA_DRIFT"]
+  receivables: ["RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING"]
 };
 
 const DATASETS = [
@@ -39,7 +39,7 @@ const DATASETS = [
   { label: "Receivables reporting view", value: "receivables" }
 ];
 
-function initialParameters(job: string): string {
+function initialParameters(job: string, datasetKey = "sales_orders"): string {
   switch (job) {
     case "RFM": return JSON.stringify({ asOfDate: new Date().toISOString().slice(0, 10) }, null, 2);
     case "CUSTOMER_SEGMENTATION": return JSON.stringify({ clusters: 5, maxIterations: 100, featureColumns: ["recency_days", "frequency", "monetary_value"] }, null, 2);
@@ -48,7 +48,21 @@ function initialParameters(job: string): string {
     case "INVENTORY_ANOMALY": return JSON.stringify({ zThreshold: 3 }, null, 2);
     case "MARKET_BASKET": return JSON.stringify({ minSupport: 0.01, minConfidence: 0.25 }, null, 2);
     case "RECEIVABLES_RISK": return JSON.stringify({ trainThroughDate: "2026-06-30", reviewThreshold: 0.65, featureColumns: ["invoice_amount", "customer_overdue_rate", "historical_average_payment_delay", "payment_terms_days"] }, null, 2);
-    case "DATA_DRIFT": return JSON.stringify({ modelName: "customer_segmentation", modelVersion: 1, featureColumns: ["recency_days", "frequency", "monetary_value"], alertThreshold: 0.25, asOfDate: new Date().toISOString().slice(0, 10) }, null, 2);
+    case "DATA_DRIFT": return JSON.stringify({
+      modelName: datasetKey === "inventory_daily" ? "demand_forecast" : datasetKey === "receivables" ? "receivables_risk" : "customer_segmentation",
+      modelVersion: 1,
+      featureColumns: datasetKey === "inventory_daily" ? ["_lag_1", "_lag_7", "_lag_14", "_day_of_week"]
+        : datasetKey === "receivables" ? ["invoice_amount", "customer_overdue_rate", "historical_average_payment_delay", "payment_terms_days"]
+        : ["recency_days", "frequency", "monetary_value"],
+      alertThreshold: 0.25,
+      asOfDate: new Date().toISOString().slice(0, 10)
+    }, null, 2);
+    case "MODEL_SCORING": return JSON.stringify({
+      modelName: datasetKey === "inventory_daily" ? "demand_forecast" : datasetKey === "receivables" ? "receivables_risk" : "customer_segmentation",
+      modelVersion: 1,
+      ...(datasetKey === "sales_orders" ? { asOfDate: new Date().toISOString().slice(0, 10) } : {}),
+      ...(datasetKey === "receivables" ? { reviewThreshold: 0.65 } : {})
+    }, null, 2);
     default: return "{}";
   }
 }
@@ -176,12 +190,12 @@ function SparkMlOperations() {
     setDatasetKey(next);
     const nextJob = DATASET_JOBS[next]?.[0] || "RFM";
     setJobType(nextJob);
-    setParametersText(initialParameters(nextJob));
+    setParametersText(initialParameters(nextJob, next));
   }
 
   function changeJob(next: string) {
     setJobType(next);
-    setParametersText(initialParameters(next));
+    setParametersText(initialParameters(next, datasetKey));
   }
 
   async function refreshAll() {
