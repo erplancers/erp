@@ -41,7 +41,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String scopeFingerprint = reader.scopeFingerprint(definition, job);
         Dataset<Row> source = reader.read(definition, job);
         source.sparkSession().sparkContext().setJobGroup(job.id(), "ERP analytics " + job.jobType(), true);
-        String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id();
+        String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id()
+                + "/attempt-" + job.attemptCount();
         String inputEvidence = "source=" + definition.table() + "; filtered-at-execution=" + Instant.now();
         Map<String, Object> metrics = new LinkedHashMap<>();
         String algorithm = job.jobType();
@@ -198,11 +199,23 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 if (!job.datasetKey().equals(manifestNode.path("datasetKey").asText())) {
                     throw new SecurityException("Dataset key does not match model training dataset");
                 }
+                String expectedTable = manifestNode.path("sourceTable").asText("");
+                String expectedProjections = manifestNode.path("sourceProjections").asText("");
+                String configuredProjections = definition.projections().stream()
+                        .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
+                        .collect(Collectors.joining(","));
+                if (!definition.table().equals(expectedTable) || !configuredProjections.equals(expectedProjections)) {
+                    throw new SecurityException("Approved source mapping changed since the model baseline was created");
+                }
                 if (!scopeFingerprint.equals(manifestNode.path("scopeFingerprint").asText())) {
                     throw new SecurityException("Current tenant/entity grants differ from the model baseline; retrain before drift comparison");
                 }
                 String baselineUri = manifestNode.path("baselineUri").asText("");
                 if (baselineUri.isBlank()) throw new IllegalArgumentException("This model version has no numeric drift baseline");
+                String allowedArtifactPrefix = artifactRoot + "/" + safeSegment(job.tenantId()) + "/";
+                if (!baselineUri.startsWith(allowedArtifactPrefix)) {
+                    throw new SecurityException("Model baseline artifact is outside this tenant's protected artifact namespace");
+                }
                 List<String> features = stringList(p, "featureColumns",
                         readStringArray(manifestNode.path("featureColumns").toString()));
                 List<String> trainedFeatures = readStringArray(manifestNode.path("featureColumns").toString());
@@ -241,7 +254,11 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String manifest = json.writeValueAsString(Map.ofEntries(
                 Map.entry("modelType", algorithm), Map.entry("jobId", job.id()),
                 Map.entry("tenantId", job.tenantId()), Map.entry("createdBy", job.requestedBy()),
-                Map.entry("datasetKey", job.datasetKey()), Map.entry("sparkVersion", source.sparkSession().version()),
+                Map.entry("datasetKey", job.datasetKey()), Map.entry("sourceTable", definition.table()),
+                Map.entry("sourceProjections", definition.projections().stream()
+                        .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
+                        .collect(Collectors.joining(","))),
+                Map.entry("sparkVersion", source.sparkSession().version()),
                 Map.entry("createdAt", Instant.now().toString()), Map.entry("parameters", p),
                 Map.entry("metrics", metrics), Map.entry("inputEvidence", inputEvidence),
                 Map.entry("outputPath", outputPath), Map.entry("baselineUri", baselinePath == null ? "" : baselinePath),
