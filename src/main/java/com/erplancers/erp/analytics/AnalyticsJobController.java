@@ -30,12 +30,12 @@ import java.util.regex.Pattern;
 public class AnalyticsJobController {
     private static final Pattern SAFE_ALIAS = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,63}");
     private static final Set<String> SUPPORTED_JOBS = Set.of(
-            "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION",
+            "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
             "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
-                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "DATA_DRIFT", "MODEL_SCORING")),
+                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
@@ -44,6 +44,7 @@ public class AnalyticsJobController {
             Map.entry("COHORT_ANALYSIS", Set.of()),
             Map.entry("CUSTOMER_LIFETIME_VALUE", Set.of()),
             Map.entry("CUSTOMER_SEGMENTATION", Set.of("featureColumns", "clusters", "maxIterations")),
+            Map.entry("CUSTOMER_CHURN_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate", "algorithm", "reviewThreshold")),
             Map.entry("DEMAND_FORECAST", Set.of("trainThroughDate")),
             Map.entry("STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate")),
             Map.entry("INVENTORY_ANOMALY", Set.of("zThreshold")),
@@ -149,6 +150,13 @@ public class AnalyticsJobController {
                         || features.stream().anyMatch(x -> !(x instanceof String s) || !SAFE_ALIAS.matcher(s).matches())) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "featureColumns must be 1-64 safe logical column aliases");
                 }
+            }
+            if ("labelColumn".equals(entry.getKey()) && (!(entry.getValue() instanceof String label) || !SAFE_ALIAS.matcher(label).matches())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "labelColumn must be a safe logical column alias");
+            }
+            if ("algorithm".equals(entry.getKey()) && (!(entry.getValue() instanceof String algorithm)
+                    || !Set.of("LOGISTIC_REGRESSION", "RANDOM_FOREST", "GRADIENT_BOOSTED_TREES").contains(algorithm))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported churn model algorithm");
             }
             if (entry.getValue() instanceof String s && s.length() > 500) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parameter value too long");

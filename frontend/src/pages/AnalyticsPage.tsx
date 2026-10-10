@@ -26,7 +26,7 @@ const NUMERIC_TYPES = new Set([
 ]);
 
 const DATASET_JOBS: Record<string, string[]> = {
-  sales_orders: ["RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "DATA_DRIFT", "MODEL_SCORING"],
+  sales_orders: ["RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING"],
   inventory_daily: ["DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING"],
   order_lines: ["MARKET_BASKET"],
   receivables: ["RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING"]
@@ -43,6 +43,7 @@ function initialParameters(job: string, datasetKey = "sales_orders"): string {
   switch (job) {
     case "RFM": return JSON.stringify({ asOfDate: new Date().toISOString().slice(0, 10) }, null, 2);
     case "CUSTOMER_SEGMENTATION": return JSON.stringify({ clusters: 5, maxIterations: 100, featureColumns: ["recency_days", "frequency", "monetary_value"] }, null, 2);
+    case "CUSTOMER_CHURN_RISK": return JSON.stringify({ trainThroughDate: "2026-09-30", labelColumn: "churn_label", featureColumns: ["net_amount"], algorithm: "RANDOM_FOREST", reviewThreshold: 0.65 }, null, 2);
     case "DEMAND_FORECAST": return JSON.stringify({ trainThroughDate: "2026-09-30" }, null, 2);
     case "STOCKOUT_RISK": return JSON.stringify({ trainThroughDate: "2026-09-30", featureColumns: ["recent_demand", "on_hand", "lead_time_days"], labelColumn: "stockout_label" }, null, 2);
     case "INVENTORY_ANOMALY": return JSON.stringify({ zThreshold: 3 }, null, 2);
