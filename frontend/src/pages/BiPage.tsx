@@ -121,6 +121,15 @@ export function BiPage() {
     setFilters(previous => ({ ...previous, [filterField + ":" + filterOperator]: requiresValue ? filterValue.trim() : "" }));
     setFilterField(""); setFilterValue(""); setFilterOperator("eq");
   }
+  async function withCalculatedMeasures(data: BiResult): Promise<BiResult> {
+    if (!credentials || !tenantId.trim() || !savedMeasures.data?.length || !data.rows?.length) return data;
+    const expressions = Object.fromEntries(savedMeasures.data.map(measure => [measure.measureKey, measure.expression]));
+    const rows = await api.evaluateBiMeasureSeries({
+      tenantId: tenantId.trim(), resourceSlug: slug, expressions, rows: data.rows
+    }, credentials);
+    return { ...data, rows };
+  }
+
   function runQuery() {
     if (!credentials || !slug || dimensions.length === 0 || measures.length === 0) return;
     setError(null); setResult(null); setLoading(true);
@@ -129,7 +138,7 @@ export function BiPage() {
       limit: Math.min(1000, Math.max(1, limit)), includeRank,
       includeShareOfTotal: includeShare, includeGrandTotal
     }, credentials)
-      .then((data: BiResult) => setResult(data))
+      .then((data: BiResult) => withCalculatedMeasures(data).then(setResult))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "BI query failed"))
       .finally(() => setLoading(false));
   }
@@ -171,7 +180,7 @@ export function BiPage() {
     setError(null); setLoading(true);
     try {
       const saved = await api.runBiReport(selectedReportId, tenantId.trim(), credentials);
-      setResult(saved);
+      setResult(await withCalculatedMeasures(saved));
       setWorkspaceNotice("Loaded saved report.");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to run saved report"); }
     finally { setLoading(false); }
@@ -320,7 +329,7 @@ export function BiPage() {
           </div>
           <div className="border-top-1 surface-border pt-3">
             <h3 className="text-lg mt-0">Calculated measure</h3>
-            <p className="text-500 text-sm">Safe expressions: arithmetic, ratio(a,b), margin(revenue,cost), periodChange(current,previous), periodChangePct(current,previous), abs, min and max. Running totals use ordered numeric series.</p>
+            <p className="text-500 text-sm">Safe expressions: arithmetic, ratio(a,b), margin(revenue,cost), periodChange(current,previous), periodChangePct(current,previous), abs, min and max. Use aggregate aliases such as sum_revenue; runningTotal(sum_amount) uses current result ordering.</p>
             <div className="flex flex-wrap gap-2 align-items-end">
               <label className="flex flex-column gap-2"><span>Key</span><InputText value={measureKey} onChange={event => setMeasureKey(event.target.value)} /></label>
               <label className="flex flex-column gap-2"><span>Name</span><InputText value={measureName} onChange={event => setMeasureName(event.target.value)} /></label>
