@@ -62,7 +62,7 @@ public final class ProductRecommendationMining {
 
         Dataset<Row> expanded = model.recommendForAllUsers(topN)
                 .withColumn("recommendation", functions.explode(functions.col("recommendations")))
-                .select("userId", functions.col("recommendation.itemId").alias("itemId"),
+                .select(functions.col("userId"), functions.col("recommendation.itemId").alias("itemId"),
                         functions.col("recommendation.rating").alias("predicted_preference"));
         Dataset<Row> recommendations = expanded.join(transactionMap, "userId")
                 .join(productMap, "itemId")
@@ -71,7 +71,7 @@ public final class ProductRecommendationMining {
                                 .orderBy(functions.col("predicted_preference").desc())))
                 .select(functions.col("transaction_key").alias("transaction_id"),
                         functions.col("product_key").alias("recommended_product_id"),
-                        "predicted_preference", "recommendation_rank")
+                        functions.col("predicted_preference"), functions.col("recommendation_rank"))
                 .filter(functions.col("recommendation_rank").leq(topN));
         return new Result(recommendations, interactionCount, transactionCount, productCount, modelPath);
     }
