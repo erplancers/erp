@@ -157,6 +157,7 @@ public class BiCalculatedMeasureService {
             String name = input.substring(start, position);
             if (!name.matches("[A-Za-z_][A-Za-z0-9_]{0,63}")) throw new IllegalArgumentException("Invalid measure reference");
             Object value = row.get(name);
+            if (value == null && name.contains("_")) value = row.get(name.replaceFirst("_", ":"));
             if (!(value instanceof Number number)) throw new IllegalArgumentException("Measure is not numeric: " + name);
             return new BigDecimal(number.toString());
         }
