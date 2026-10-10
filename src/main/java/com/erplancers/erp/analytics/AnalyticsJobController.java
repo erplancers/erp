@@ -32,7 +32,7 @@ public class AnalyticsJobController {
     private static final Set<String> SUPPORTED_JOBS = Set.of(
             "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
-            "MARKET_BASKET", "RECEIVABLES_RISK");
+            "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
                     "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET", "DATA_DRIFT")),
@@ -45,10 +45,10 @@ public class AnalyticsJobController {
             "CUSTOMER_LIFETIME_VALUE", Set.of(),
             "CUSTOMER_SEGMENTATION", Set.of("featureColumns", "clusters", "maxIterations"),
             "DEMAND_FORECAST", Set.of("trainThroughDate"),
-            "STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainFraction", "trainThroughDate"),
+            "STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate"),
             "INVENTORY_ANOMALY", Set.of("zThreshold"),
             "MARKET_BASKET", Set.of("minSupport", "minConfidence"),
-            "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "trainFraction", "reviewThreshold", "trainThroughDate"),
+            "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate"),
             "DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate"));
 
     private final JdbcTemplate jdbc;
