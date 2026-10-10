@@ -19,9 +19,10 @@ public final class InventoryMining {
     private InventoryMining() {}
 
     public record ForecastResult(PipelineModel model, Dataset<Row> predictions, Dataset<Row> baselineFeatures,
-                                 double rmse, double mae, long trainingRows, long holdoutRows) {}
+                                 double rmse, double mae, double r2, long trainingRows, long holdoutRows) {}
     public record StockoutResult(PipelineModel model, Dataset<Row> predictions, Dataset<Row> baselineFeatures,
-                                 double areaUnderRoc, long trainingRows, long holdoutRows) {}
+                                 double areaUnderRoc, double weightedPrecision, double weightedRecall,
+                                 long trainingRows, long holdoutRows) {}
 
     public static ForecastResult forecastDemand(
             Dataset<Row> dailyDemand, String product, String warehouse, String day, String quantity,
@@ -47,8 +48,9 @@ public final class InventoryMining {
         Dataset<Row> predictions = model.transform(test).select(product, warehouse, day, quantity, "prediction");
         double rmse = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("rmse").evaluate(predictions);
         double mae = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("mae").evaluate(predictions);
+        double r2 = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("r2").evaluate(predictions);
         model.write().overwrite().save(modelPath);
-        return new ForecastResult(model, predictions, train.select(inputs), rmse, mae, trainCount, testCount);
+        return new ForecastResult(model, predictions, train.select(inputs), rmse, mae, r2, trainCount, testCount);
     }
 
     /**
@@ -78,12 +80,53 @@ public final class InventoryMining {
                         .setFeaturesCol("features").setLabelCol(labelColumn).setMaxIter(100).setRegParam(0.05);
         PipelineModel model = new Pipeline().setStages(new PipelineStage[]{assembler, classifier}).fit(split[0]);
         Dataset<Row> predictions = model.transform(split[1]);
-        double auc = new org.apache.spark.ml.evaluation.BinaryClassificationEvaluator()
-                .setLabelCol(labelColumn).setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC").evaluate(predictions);
+        ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, labelColumn);
         model.write().overwrite().save(modelPath);
-        return new StockoutResult(model, predictions, split[0].select(featureColumns.toArray(String[]::new)), auc, trainCount, holdoutCount);
+        return new StockoutResult(model, predictions, split[0].select(featureColumns.toArray(String[]::new)),
+                quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(), trainCount, holdoutCount);
     }
 
+
+
+    /** Preferred production variant: evaluates against a strictly later, date-based holdout. */
+    public static StockoutResult trainStockoutRiskTimeOrdered(
+            Dataset<Row> labelledRows, List<String> featureColumns, String labelColumn,
+            String dateColumn, String trainThroughDate, String modelPath) {
+        if (featureColumns == null || featureColumns.isEmpty()) throw new IllegalArgumentException("featureColumns is required");
+        if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
+        if (modelPath == null || modelPath.isBlank()) throw new IllegalArgumentException("modelPath is required");
+        String[] selected = new String[featureColumns.size() + 2];
+        for (int i = 0; i < featureColumns.size(); i++) selected[i] = featureColumns.get(i);
+        selected[featureColumns.size()] = labelColumn;
+        selected[featureColumns.size() + 1] = dateColumn;
+        SalesIntelligence.requireColumns(labelledRows, selected);
+        Dataset<Row> clean = labelledRows.select(selected[0],
+                java.util.Arrays.copyOfRange(selected, 1, selected.length)).na().drop("any", selected);
+        Dataset<Row> train = clean.filter(functions.to_date(functions.col(dateColumn))
+                .leq(functions.to_date(functions.lit(trainThroughDate))));
+        Dataset<Row> holdout = clean.filter(functions.to_date(functions.col(dateColumn))
+                .gt(functions.to_date(functions.lit(trainThroughDate))));
+        return fitStockout(train, holdout, featureColumns, labelColumn, modelPath);
+    }
+
+    private static StockoutResult fitStockout(Dataset<Row> train, Dataset<Row> holdout,
+                                               List<String> featureColumns, String labelColumn, String modelPath) {
+        long trainCount = train.count(), holdoutCount = holdout.count();
+        if (trainCount < 20 || holdoutCount < 10) {
+            throw new IllegalArgumentException("Stock-out risk requires >=20 training and >=10 holdout rows");
+        }
+        VectorAssembler assembler = new VectorAssembler().setInputCols(featureColumns.toArray(String[]::new))
+                .setOutputCol("features").setHandleInvalid("error");
+        org.apache.spark.ml.classification.LogisticRegression classifier =
+                new org.apache.spark.ml.classification.LogisticRegression()
+                        .setFeaturesCol("features").setLabelCol(labelColumn).setMaxIter(100).setRegParam(0.05);
+        PipelineModel model = new Pipeline().setStages(new PipelineStage[]{assembler, classifier}).fit(train);
+        Dataset<Row> predictions = model.transform(holdout);
+        ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, labelColumn);
+        model.write().overwrite().save(modelPath);
+        return new StockoutResult(model, predictions, train.select(featureColumns.toArray(String[]::new)),
+                quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(), trainCount, holdoutCount);
+    }
 
     /** Deterministic lag-feature transformation reused by training and drift monitoring. */
     public static Dataset<Row> demandFeatureFrame(
