@@ -32,7 +32,7 @@ public class BiCalculatedMeasureService {
                 try {
                     BigDecimal value = new Parser(measure.expression(), mutable).parse();
                     mutable.put(measure.name(), value);
-                } catch (RuntimeException invalid) {
+                } catch (ArithmeticException invalid) {
                     mutable.put(measure.name(), null);
                 }
             }
