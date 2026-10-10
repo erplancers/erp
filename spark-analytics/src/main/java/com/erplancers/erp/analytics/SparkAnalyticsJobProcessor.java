@@ -40,11 +40,16 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         AnalyticsDatasetCatalog.DatasetDefinition definition = catalog.require(job.datasetKey());
         context.checkCancellation();
         String scopeFingerprint = reader.scopeFingerprint(definition, job);
-        Dataset<Row> source = reader.read(definition, job);
-        source.sparkSession().sparkContext().setJobGroup(job.id(), "ERP analytics " + job.jobType(), true);
+        Dataset<Row> rawSource = reader.read(definition, job);
+        rawSource.sparkSession().sparkContext().setJobGroup(job.id(), "ERP analytics " + job.jobType(), true);
+        Dataset<Row> source = rawSource.persist(org.apache.spark.storage.StorageLevel.DISK_ONLY());
+        try {
+        // Materialize the scoped JDBC result once so subsequent Spark actions share one extract.
+        long sourceRows = source.count();
         String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id()
                 + "/attempt-" + job.attemptCount();
-        String inputEvidence = "source=" + definition.table() + "; filtered-at-execution=" + Instant.now();
+        String inputEvidence = "source=" + definition.table() + "; rows=" + sourceRows
+                + "; extractedAt=" + Instant.now() + "; scopeFingerprint=" + scopeFingerprint;
         Map<String, Object> metrics = new LinkedHashMap<>();
         String algorithm = job.jobType();
         String modelPath = null;
@@ -379,8 +384,11 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 "humanReviewRequired", job.jobType().equals("RECEIVABLES_RISK")));
         return new JobResult(resultJson, algorithm, job.parametersJson(), json.writeValueAsString(safeMetrics),
                 inputEvidence, candidateArtifactUri, manifest, driftObservations);
+        } finally {
+            source.unpersist(false);
+            source.sparkSession().sparkContext().clearJobGroup();
+        }
     }
-
 
     private static Object jsonSafe(Object value) {
         if (value instanceof Double d && !Double.isFinite(d)) return null;
