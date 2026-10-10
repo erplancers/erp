@@ -32,22 +32,27 @@ public class AnalyticsModelController {
                                   @RequestParam(required = false) String modelName) {
         require(authentication, "READ");
         tenant(authentication.getName(), tenantId);
+        boolean canReviewAll = authorization.isAllowed(authentication, "analytics", "MODEL_APPROVE")
+                || authorization.isAllowed(authentication, "analytics", "MODEL_PROMOTE")
+                || authorization.isAllowed(authentication, "analytics", "MODEL_ROLLBACK");
         String query = """
                 SELECT id, tenant_id, model_name, version, status, artifact_uri,
                        manifest_json, metrics_json, created_at, promoted_at, promoted_by
                 FROM analytics_model_version WHERE tenant_id = ?
-                """ + (modelName == null ? "" : " AND model_name = ?") + " ORDER BY model_name, version DESC LIMIT 200";
-        return modelName == null
-                ? jdbc.query(query, (rs, n) -> new ModelView(rs.getString("id"), rs.getString("tenant_id"),
-                    rs.getString("model_name"), rs.getInt("version"), rs.getString("status"), rs.getString("artifact_uri"),
-                    rs.getString("manifest_json"), rs.getString("metrics_json"), rs.getTimestamp("created_at").toInstant(),
-                    rs.getTimestamp("promoted_at") == null ? null : rs.getTimestamp("promoted_at").toInstant(),
-                    rs.getString("promoted_by")), tenantId)
-                : jdbc.query(query, (rs, n) -> new ModelView(rs.getString("id"), rs.getString("tenant_id"),
-                    rs.getString("model_name"), rs.getInt("version"), rs.getString("status"), rs.getString("artifact_uri"),
-                    rs.getString("manifest_json"), rs.getString("metrics_json"), rs.getTimestamp("created_at").toInstant(),
-                    rs.getTimestamp("promoted_at") == null ? null : rs.getTimestamp("promoted_at").toInstant(),
-                    rs.getString("promoted_by")), tenantId, modelName);
+                """ + (canReviewAll ? "" : " AND created_by = ?")
+                + (modelName == null ? "" : " AND model_name = ?") + " ORDER BY model_name, version DESC LIMIT 200";
+        var mapper = (org.springframework.jdbc.core.RowMapper<ModelView>) (rs, n) -> new ModelView(
+                rs.getString("id"), rs.getString("tenant_id"), rs.getString("model_name"),
+                rs.getInt("version"), rs.getString("status"), rs.getString("artifact_uri"),
+                rs.getString("manifest_json"), rs.getString("metrics_json"), rs.getTimestamp("created_at").toInstant(),
+                rs.getTimestamp("promoted_at") == null ? null : rs.getTimestamp("promoted_at").toInstant(),
+                rs.getString("promoted_by"));
+        if (modelName == null) {
+            if (canReviewAll) return jdbc.query(query, mapper, tenantId);
+            return jdbc.query(query, mapper, tenantId, authentication.getName());
+        }
+        if (canReviewAll) return jdbc.query(query, mapper, tenantId, modelName);
+        return jdbc.query(query, mapper, tenantId, authentication.getName(), modelName);
     }
 
     @GetMapping("/experiments")
@@ -69,14 +74,21 @@ public class AnalyticsModelController {
                                  @RequestParam(required = false) String modelName) {
         require(authentication, "READ");
         tenant(authentication.getName(), tenantId);
+        boolean canReviewAll = authorization.isAllowed(authentication, "analytics", "MODEL_APPROVE")
+                || authorization.isAllowed(authentication, "analytics", "MODEL_PROMOTE")
+                || authorization.isAllowed(authentication, "analytics", "MODEL_ROLLBACK");
         String query = """
                 SELECT id, model_name, model_version, feature_name, population_stability_index,
                        sample_size, baseline_snapshot, current_snapshot, measured_at, status
                 FROM analytics_drift_metric WHERE tenant_id = ?
-                """ + (modelName == null ? "" : " AND model_name = ?") + " ORDER BY measured_at DESC LIMIT 500";
-        return modelName == null
-                ? jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId)
-                : jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId, modelName);
+                """ + (canReviewAll ? "" : " AND created_by = ?")
+                + (modelName == null ? "" : " AND model_name = ?") + " ORDER BY measured_at DESC LIMIT 500";
+        if (modelName == null) {
+            if (canReviewAll) return jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId);
+            return jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId, authentication.getName());
+        }
+        if (canReviewAll) return jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId, modelName);
+        return jdbc.query(query, (rs, n) -> mapDrift(rs), tenantId, authentication.getName(), modelName);
     }
 
     @PostMapping("/models/{modelName}/{version}/review")
