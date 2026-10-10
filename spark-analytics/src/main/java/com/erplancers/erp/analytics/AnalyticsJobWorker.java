@@ -72,7 +72,7 @@ public final class AnalyticsJobWorker {
             }
             store.complete(job, workerId, result.resultJson());
         } catch (JobCancelledException cancelled) {
-            store.fail(job, workerId, cancelled);
+            store.fail(job, workerId, cancelled, false);
         } catch (Exception failure) {
             try {
                 store.recordExperiment(job, job.jobType(), job.parametersJson(),
@@ -80,7 +80,11 @@ public final class AnalyticsJobWorker {
             } catch (SQLException trackingFailure) {
                 failure.addSuppressed(trackingFailure);
             }
-            store.fail(job, workerId, failure);
+            boolean retryable = !(failure instanceof IllegalArgumentException
+                    || failure instanceof SecurityException
+                    || failure instanceof ClassCastException
+                    || failure instanceof UnsupportedOperationException);
+            store.fail(job, workerId, failure, retryable);
         } finally {
             beat.cancel(true);
             heartbeat.shutdownNow();
