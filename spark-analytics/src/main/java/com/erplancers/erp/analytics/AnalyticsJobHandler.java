@@ -6,7 +6,15 @@ public interface AnalyticsJobHandler {
 
     record JobResult(String resultJson, String algorithm, String parametersJson,
                      String metricsJson, String inputSnapshot, String artifactUri,
-                     String manifestJson) {}
+                     String manifestJson, java.util.List<DriftObservation> driftObservations) {
+        public JobResult {
+            driftObservations = driftObservations == null ? java.util.List.of() : java.util.List.copyOf(driftObservations);
+        }
+    }
+
+    record DriftObservation(String modelName, int modelVersion, String feature, double psi,
+                            String status, long baselineRows, long currentRows,
+                            String baselineSnapshot, String currentSnapshot) {}
 
     interface JobExecutionContext {
         boolean cancellationRequested() throws Exception;
