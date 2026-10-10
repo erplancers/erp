@@ -133,10 +133,14 @@ public final class AnalyticsJobStore {
     }
 
     public void fail(Job job, String workerId, Throwable failure) throws SQLException {
+        fail(job, workerId, failure, true);
+    }
+
+    public void fail(Job job, String workerId, Throwable failure, boolean retryable) throws SQLException {
         String message = failure == null ? "Unknown analytics job failure" : failure.getClass().getSimpleName()
                 + ": " + String.valueOf(failure.getMessage());
         if (message.length() > 3900) message = message.substring(0, 3900);
-        boolean retry = job.attemptCount() < job.maxAttempts();
+        boolean retry = retryable && job.attemptCount() < job.maxAttempts();
         int delaySeconds = (int) Math.min(900, 15L * (1L << Math.min(6, Math.max(0, job.attemptCount() - 1))));
         try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("""
                 UPDATE analytics_job
