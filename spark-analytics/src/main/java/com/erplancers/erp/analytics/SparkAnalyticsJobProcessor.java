@@ -201,7 +201,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 List<String> features = stringList(p, "featureColumns", List.of("net_amount"));
                 String label = stringParameter(p, "labelColumn", "churn_label");
                 requireAliases(source, features);
-                requireAliases(source, List.of(label, "customer_id", "order_date"));
+                requireAliases(source, List.of(label, "customer_id", "order_id", "order_date"));
                 String selectedAlgorithm = stringParameter(p, "algorithm", "LOGISTIC_REGRESSION");
                 double threshold = doubleParameter(p, "reviewThreshold", 0.65, 0.0, 1.0);
                 modelPath = output + "/model";
