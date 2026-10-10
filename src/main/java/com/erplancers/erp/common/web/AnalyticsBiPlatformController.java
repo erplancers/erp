@@ -5,10 +5,10 @@ import com.erplancers.erp.common.reporting.ErpBiEngine;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.librepdf.openpdf.text.Document;
-import com.github.librepdf.openpdf.text.Paragraph;
-import com.github.librepdf.openpdf.text.pdf.PdfPTable;
-import com.github.librepdf.openpdf.text.pdf.PdfWriter;
+import com.lowagie.text.Document;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.pdf.PdfPTable;
+import com.lowagie.text.pdf.PdfWriter;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
@@ -66,7 +66,7 @@ public class AnalyticsBiPlatformController {
         List<QueryResult> cached = jdbc.query("""
                 SELECT result_json, created_at FROM analytics_query_cache
                  WHERE cache_key = ? AND owner_username = ? AND expires_at > CURRENT_TIMESTAMP
-                """, (rs, n) -> new QueryResult(mapper.readValue(rs.getString("result_json"), ErpBiEngine.BiReport.class),
+                """, (rs, n) -> new QueryResult(readBiReport(rs.getString("result_json")),
                 true, rs.getTimestamp("created_at").toInstant()), hash, auth.getName());
         if (!cached.isEmpty()) return cached.getFirst();
 
@@ -296,7 +296,7 @@ public class AnalyticsBiPlatformController {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }
-    private ErpBiEngine.BiQuery readQuery(String value) {
+    private ErpBiEngine.BiReport readBiReport(String value) {\n        try { return mapper.readValue(value, ErpBiEngine.BiReport.class); }\n        catch (Exception e) { throw new IllegalStateException("Cached BI result is invalid", e); }\n    }\n    private ErpBiEngine.BiQuery readQuery(String value) {
         try { return mapper.readValue(value, ErpBiEngine.BiQuery.class); }
         catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saved report query is invalid"); }
     }
