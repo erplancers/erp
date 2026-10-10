@@ -100,7 +100,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("segments", result.summaries());
                 metrics.putAll(result.metrics());
                 baselinePath = output + "/monitoring-baseline";
-                write(rfm.select(features.toArray(String[]::new)), baselinePath);
+                write(SalesIntelligence.selectColumns(rfm, features.toArray(String[]::new)), baselinePath);
                 modelFeatureColumns = features;
                 metrics.put("modelPath", modelPath);
                 outputPath = predictionsPath;
@@ -260,7 +260,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                         Dataset<Row> raw = scoringModel.transform(scoringInput);
                         scoringInput = raw.withColumn("stockout_risk_score",
                                         org.apache.spark.ml.functions.vector_to_array(
-                                                org.apache.spark.sql.functions.col("probability")).getItem(1))
+                                                org.apache.spark.sql.functions.col("probability"), "float64").getItem(1))
                                 .withColumn("human_review_required", org.apache.spark.sql.functions.col("stockout_risk_score").geq(0.65))
                                 .withColumn("recommended_action", org.apache.spark.sql.functions.lit("REVIEW_INVENTORY"))
                                 .drop("features", "rawPrediction", "probability", "prediction");
