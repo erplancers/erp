@@ -79,3 +79,29 @@ export interface AnalyticsJobSubmitRequest {
   parameters: Record<string, unknown>;
   idempotencyKey?: string;
 }
+
+export interface SavedBiReport {
+  id: string;
+  ownerUsername: string;
+  resourceSlug: string;
+  reportName: string;
+  description?: string | null;
+  queryJson: string;
+  calculatedMeasuresJson: string;
+  visibility: "PRIVATE" | "SHARED" | string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface RetrainingPolicy {
+  tenantId: string;
+  modelName: string;
+  enabled: boolean;
+  datasetKey: string;
+  jobType: string;
+  parametersJson: string;
+  cronExpression: string;
+  minDaysBetweenRuns: number;
+  lastEnqueuedAt?: string | null;
+  updatedBy: string;
+  updatedAt: string;
+}
