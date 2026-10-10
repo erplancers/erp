@@ -19,12 +19,13 @@ import java.util.Set;
 @RequiredArgsConstructor
 @RequestMapping("/api/analytics")
 public class AnalyticsRetrainingPolicyController {
-    private static final Map<String, String> DATASET_BY_JOB = Map.of(
-            "CUSTOMER_SEGMENTATION", "sales_orders",
-            "CUSTOMER_CHURN_RISK", "sales_orders",
-            "DEMAND_FORECAST", "inventory_daily",
-            "STOCKOUT_RISK", "inventory_daily",
-            "RECEIVABLES_RISK", "receivables");
+    private static final Map<String, Set<String>> DATASETS_BY_JOB = Map.of(
+            "CUSTOMER_SEGMENTATION", Set.of("sales_orders"),
+            "CUSTOMER_CHURN_RISK", Set.of("sales_orders"),
+            "DEMAND_FORECAST", Set.of("inventory_daily"),
+            "STOCKOUT_RISK", Set.of("inventory_daily"),
+            "RECEIVABLES_RISK", Set.of("receivables"),
+            "MODEL_SCORING", Set.of("sales_orders", "inventory_daily", "receivables"));
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
     private final ObjectMapper mapper;
@@ -55,8 +56,8 @@ public class AnalyticsRetrainingPolicyController {
         }
         tenantGrant(auth.getName(), request.tenantId());
         String jobType = request.jobType() == null ? "" : request.jobType().toUpperCase();
-        String expectedDataset = DATASET_BY_JOB.get(jobType);
-        if (expectedDataset == null || !expectedDataset.equals(request.datasetKey())
+        Set<String> allowedDatasets = DATASETS_BY_JOB.get(jobType);
+        if (allowedDatasets == null || !allowedDatasets.contains(request.datasetKey())
                 || request.parameters() == null || request.parameters().size() > 20
                 || request.cronExpression() == null || request.cronExpression().length() > 120
                 || request.minDaysBetweenRuns() < 1 || request.minDaysBetweenRuns() > 365) {
