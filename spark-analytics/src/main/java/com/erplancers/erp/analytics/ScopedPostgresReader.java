@@ -2,6 +2,14 @@ package com.erplancers.erp.analytics;
 
 import java.util.Locale;
 import java.util.Objects;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.Properties;
 import java.util.regex.Pattern;
 
 import org.apache.spark.sql.Dataset;
@@ -67,6 +75,7 @@ public final class ScopedPostgresReader {
                 .option("driver", "org.postgresql.Driver")
                 .option("fetchsize", "10000")
                 .option("queryTimeout", "600")
+                .option("sessionInitStatement", "SET default_transaction_read_only = on")
                 .load();
     }
 
@@ -85,4 +94,50 @@ public final class ScopedPostgresReader {
         if (value == null || value.isBlank()) throw new IllegalArgumentException(name + " is required");
         return value;
     }
+
+    /** Fingerprints the exact active row-scope grant set used to create a model baseline. */
+    public String scopeFingerprint(AnalyticsDatasetCatalog.DatasetDefinition definition,
+                                   AnalyticsJobStore.Job job) throws SQLException {
+        try (Connection connection = openReadOnlyConnection();
+             PreparedStatement statement = connection.prepareStatement("""
+                     SELECT sg.scope_id
+                       FROM analytics_scope_grant sg
+                       JOIN analytics_tenant_grant tg
+                         ON tg.username = sg.username AND tg.tenant_id = sg.tenant_id
+                      WHERE sg.username = ? AND sg.tenant_id = ? AND sg.scope_type = ?
+                        AND sg.active = TRUE AND tg.active = TRUE
+                      ORDER BY sg.scope_id
+                     """)) {
+            statement.setString(1, job.requestedBy());
+            statement.setString(2, job.tenantId());
+            statement.setString(3, definition.scopeType());
+            StringBuilder canonical = new StringBuilder();
+            int count = 0;
+            try (ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    canonical.append(rows.getString(1)).append('\\n');
+                    count++;
+                }
+            }
+            if (count == 0) throw new SecurityException("No active scope grants exist at execution time");
+            try {
+                byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
+                return "sha256:" + java.util.HexFormat.of().formatHex(digest);
+            } catch (java.security.NoSuchAlgorithmException impossible) {
+                throw new IllegalStateException("SHA-256 is unavailable", impossible);
+            }
+        }
+    }
+
+    private Connection openReadOnlyConnection() throws SQLException {
+        Properties properties = new Properties();
+        properties.setProperty("user", readOnlyUsername);
+        properties.setProperty("password", readOnlyPassword);
+        properties.setProperty("readOnly", "true");
+        properties.setProperty("ApplicationName", "erplancers-spark-scope-check");
+        Connection connection = DriverManager.getConnection(jdbcUrl, properties);
+        connection.setReadOnly(true);
+        return connection;
+    }
+
 }
