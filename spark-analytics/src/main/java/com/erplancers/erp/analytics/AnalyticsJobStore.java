@@ -203,8 +203,8 @@ public final class AnalyticsJobStore {
                 String id = UUID.randomUUID().toString();
                 try (PreparedStatement ps = c.prepareStatement("""
                         INSERT INTO analytics_model_version
-                          (id, tenant_id, model_name, version, status, artifact_uri, manifest_json, metrics_json)
-                        VALUES (?, ?, ?, ?, 'CANDIDATE', ?, ?, ?)
+                          (id, tenant_id, model_name, version, status, artifact_uri, manifest_json, metrics_json, created_by)
+                        VALUES (?, ?, ?, ?, 'CANDIDATE', ?, ?, ?, ?)
                         """)) {
                     ps.setString(1, id); ps.setString(2, job.tenantId()); ps.setString(3, modelName);
                     ps.setInt(4, version); ps.setString(5, artifactUri);
@@ -329,15 +329,15 @@ public final class AnalyticsJobStore {
     public void recordDrift( Job job, AnalyticsJobHandler.DriftObservation observation) throws SQLException {
         try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("""
                 INSERT INTO analytics_drift_metric
-                  (tenant_id, model_name, model_version, feature_name, population_stability_index,
+                  (tenant_id, model_name, model_version, created_by, feature_name, population_stability_index,
                    sample_size, baseline_snapshot, current_snapshot, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)) {
             ps.setString(1, job.tenantId()); ps.setString(2, observation.modelName());
-            ps.setInt(3, observation.modelVersion()); ps.setString(4, observation.feature());
-            ps.setDouble(5, observation.psi()); ps.setLong(6, observation.currentRows());
-            ps.setString(7, observation.baselineSnapshot()); ps.setString(8, observation.currentSnapshot());
-            ps.setString(9, observation.status()); ps.executeUpdate();
+            ps.setInt(3, observation.modelVersion()); ps.setString(4, job.requestedBy());
+            ps.setString(5, observation.feature()); ps.setDouble(6, observation.psi());
+            ps.setLong(7, observation.currentRows()); ps.setString(8, observation.baselineSnapshot());
+            ps.setString(9, observation.currentSnapshot()); ps.setString(10, observation.status()); ps.executeUpdate();
         }
     }
 
