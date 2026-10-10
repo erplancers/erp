@@ -26,7 +26,7 @@ public final class AnalyticsJobStore {
 
     public record Job(String id, String tenantId, String requestedBy, String jobType, String datasetKey,
                       String scopeType, String parametersJson, int attemptCount, int maxAttempts,
-                      Instant createdAt) {}
+                      Instant createdAt, String workerId) {}
     public record ModelVersion(String id, String tenantId, String modelName, int version,
                               String status, String artifactUri, String manifestJson, String metricsJson) {}
 
@@ -75,7 +75,7 @@ public final class AnalyticsJobStore {
                         selected = new Job(id, rs.getString("tenant_id"), rs.getString("requested_by"),
                                 rs.getString("job_type"), rs.getString("dataset_key"), rs.getString("scope_type"),
                                 rs.getString("parameters_json"), rs.getInt("attempt_count") + 1,
-                                rs.getInt("max_attempts"), rs.getTimestamp("created_at").toInstant());
+                                rs.getInt("max_attempts"), rs.getTimestamp("created_at").toInstant(), workerId);
                     }
                 }
                 if (selected == null) {
@@ -110,20 +110,9 @@ public final class AnalyticsJobStore {
                 "SELECT status FROM analytics_job WHERE id = ? AND worker_id = ?")) {
             ps.setString(1, job.id());
             // worker id isn't part of the Job to avoid leaking worker internals; status is safely queried by ID here.
-            ps.setString(2, currentWorkerFor(job.id()));
+            ps.setString(2, job.workerId());
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() && "CANCEL_REQUESTED".equals(rs.getString(1));
-            }
-        }
-    }
-
-    private String currentWorkerFor(String jobId) throws SQLException {
-        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement(
-                "SELECT worker_id FROM analytics_job WHERE id = ?")) {
-            ps.setString(1, jobId);
-            try (ResultSet rs = ps.executeQuery()) {
-                if (!rs.next()) return "";
-                return rs.getString(1);
             }
         }
     }
