@@ -32,12 +32,12 @@ public class AnalyticsJobController {
     private static final Set<String> SUPPORTED_JOBS = Set.of(
             "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
-            "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
+            "MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
                     "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
-            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
+            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET", "PRODUCT_RECOMMENDATIONS")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.ofEntries(
             Map.entry("RFM", Set.of("asOfDate")),
@@ -49,6 +49,7 @@ public class AnalyticsJobController {
             Map.entry("STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate")),
             Map.entry("INVENTORY_ANOMALY", Set.of("zThreshold")),
             Map.entry("MARKET_BASKET", Set.of("minSupport", "minConfidence")),
+            Map.entry("PRODUCT_RECOMMENDATIONS", Set.of("topN", "rank", "maxIterations", "regularization")),
             Map.entry("RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate")),
             Map.entry("DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate")),
             Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")));
