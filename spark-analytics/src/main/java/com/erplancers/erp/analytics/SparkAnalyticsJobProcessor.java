@@ -210,6 +210,11 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                         || !configuredProjections.equals(manifestNode.path("sourceProjections").asText(""))) {
                     throw new SecurityException("Approved source mapping changed since model training");
                 }
+                if (!definition.scopeType().equals(manifestNode.path("scopeType").asText(""))
+                        || !definition.tenantColumn().equals(manifestNode.path("tenantColumn").asText(""))
+                        || !definition.scopeColumn().equals(manifestNode.path("scopeColumn").asText(""))) {
+                    throw new SecurityException("Tenant/scope filter mapping changed since model training");
+                }
                 if (!scopeFingerprint.equals(manifestNode.path("scopeFingerprint").asText())) {
                     throw new SecurityException("Current tenant/entity grants differ from the model's training scope");
                 }
@@ -299,6 +304,11 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 if (!definition.table().equals(expectedTable) || !configuredProjections.equals(expectedProjections)) {
                     throw new SecurityException("Approved source mapping changed since the model baseline was created");
                 }
+                if (!definition.scopeType().equals(manifestNode.path("scopeType").asText(""))
+                        || !definition.tenantColumn().equals(manifestNode.path("tenantColumn").asText(""))
+                        || !definition.scopeColumn().equals(manifestNode.path("scopeColumn").asText(""))) {
+                    throw new SecurityException("Tenant/scope filter mapping changed since model training");
+                }
                 if (!scopeFingerprint.equals(manifestNode.path("scopeFingerprint").asText())) {
                     throw new SecurityException("Current tenant/entity grants differ from the model baseline; retrain before drift comparison");
                 }
@@ -346,6 +356,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         if (Set.of("CUSTOMER_SEGMENTATION", "DEMAND_FORECAST", "STOCKOUT_RISK", "RECEIVABLES_RISK").contains(job.jobType())) {
             candidateArtifactUri = modelPath;
         }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> safeMetrics = (Map<String, Object>) jsonSafe(metrics);
         String manifest = json.writeValueAsString(Map.ofEntries(
                 Map.entry("modelType", algorithm), Map.entry("jobId", job.id()),
                 Map.entry("tenantId", job.tenantId()), Map.entry("createdBy", job.requestedBy()),
@@ -353,17 +365,37 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 Map.entry("sourceProjections", definition.projections().stream()
                         .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
                         .collect(Collectors.joining(","))),
+                Map.entry("scopeType", definition.scopeType()),
+                Map.entry("tenantColumn", definition.tenantColumn()),
+                Map.entry("scopeColumn", definition.scopeColumn()),
                 Map.entry("sparkVersion", source.sparkSession().version()),
                 Map.entry("createdAt", Instant.now().toString()), Map.entry("parameters", p),
-                Map.entry("metrics", metrics), Map.entry("inputEvidence", inputEvidence),
+                Map.entry("metrics", safeMetrics), Map.entry("inputEvidence", inputEvidence),
                 Map.entry("outputPath", outputPath), Map.entry("baselineUri", baselinePath == null ? "" : baselinePath),
                 Map.entry("featureColumns", modelFeatureColumns), Map.entry("scopeFingerprint", scopeFingerprint)));
         String resultJson = json.writeValueAsString(Map.of(
-                "jobId", job.id(), "algorithm", algorithm, "metrics", metrics,
+                "jobId", job.id(), "algorithm", algorithm, "metrics", safeMetrics,
                 "outputPath", outputPath, "modelPath", modelPath == null ? "" : modelPath,
                 "humanReviewRequired", job.jobType().equals("RECEIVABLES_RISK")));
-        return new JobResult(resultJson, algorithm, job.parametersJson(), json.writeValueAsString(metrics),
+        return new JobResult(resultJson, algorithm, job.parametersJson(), json.writeValueAsString(safeMetrics),
                 inputEvidence, candidateArtifactUri, manifest, driftObservations);
+    }
+
+
+    private static Object jsonSafe(Object value) {
+        if (value instanceof Double d && !Double.isFinite(d)) return null;
+        if (value instanceof Float f && !Float.isFinite(f)) return null;
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> safe = new LinkedHashMap<>();
+            map.forEach((key, item) -> safe.put(String.valueOf(key), jsonSafe(item)));
+            return safe;
+        }
+        if (value instanceof Iterable<?> values) {
+            List<Object> safe = new ArrayList<>();
+            for (Object item : values) safe.add(jsonSafe(item));
+            return safe;
+        }
+        return value;
     }
 
     private static String write(Dataset<Row> dataset, String path) {
