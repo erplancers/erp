@@ -249,7 +249,7 @@ public class BiWorkspaceController {
                 INSERT INTO analytics_operation_metric
                   (tenant_id, component, operation, status, duration_ms, rows_processed, detail_json)
                 VALUES (?, 'BI_API', ?, ?, ?, ?, ?)
-                """, tenantId, operation, status, durationMs, rows, "{\\"cache\\":\\"" + detail + "\\"}");
+                """, tenantId, operation, status, durationMs, rows, detail);
     }
 
 
