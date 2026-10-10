@@ -1,0 +1,27 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.erplancers'
+version = '0.0.1-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
+    implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
