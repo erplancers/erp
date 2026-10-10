@@ -18,6 +18,18 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.stream.Collectors;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -154,6 +166,106 @@ public class BiWorkspaceController {
         ReportView report = readableReport(id, tenantId, auth);
         requireResource(auth, report.resourceSlug(), "READ");
         return bi.query(report.resourceSlug(), queryFromDefinition(report.definitionJson()));
+    }
+
+
+    @GetMapping("/reports/{id}/export")
+    public ResponseEntity<byte[]> exportReport(Authentication auth, @PathVariable String id,
+                                                @RequestParam String tenantId,
+                                                @RequestParam(defaultValue = "CSV") String format) {
+        ReportView report = readableReport(id, tenantId, auth);
+        requireResource(auth, report.resourceSlug(), "READ");
+        ErpBiEngine.BiReport result = bi.query(report.resourceSlug(), queryFromDefinition(report.definitionJson()));
+        List<Map<String, Object>> rows = result.rows() == null ? List.of() : result.rows();
+        List<String> columns = rows.stream().flatMap(row -> row.keySet().stream()).distinct().toList();
+        String normalized = format.toUpperCase(Locale.ROOT);
+        try {
+            byte[] bytes;
+            String contentType;
+            String extension;
+            if ("CSV".equals(normalized)) {
+                StringBuilder csv = new StringBuilder();
+                csv.append(columns.stream().map(BiWorkspaceController::csvCell).collect(Collectors.joining(","))).append("\\r\\n");
+                for (Map<String, Object> row : rows) {
+                    csv.append(columns.stream().map(key -> csvCell(row.get(key))).collect(Collectors.joining(","))).append("\\r\\n");
+                }
+                bytes = ("\\uFEFF" + csv).getBytes(StandardCharsets.UTF_8);
+                contentType = "text/csv; charset=utf-8";
+                extension = "csv";
+            } else if ("XLSX".equals(normalized)) {
+                try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    Sheet sheet = workbook.createSheet("Report");
+                    Row header = sheet.createRow(0);
+                    for (int i = 0; i < columns.size(); i++) header.createCell(i).setCellValue(columns.get(i));
+                    for (int r = 0; r < rows.size(); r++) {
+                        Row excelRow = sheet.createRow(r + 1);
+                        for (int col = 0; col < columns.size(); col++) {
+                            Object value = rows.get(r).get(columns.get(col));
+                            if (value instanceof Number number) excelRow.createCell(col).setCellValue(number.doubleValue());
+                            else if (value instanceof Boolean bool) excelRow.createCell(col).setCellValue(bool);
+                            else excelRow.createCell(col).setCellValue(value == null ? "" : String.valueOf(value));
+                        }
+                    }
+                    for (int i = 0; i < columns.size(); i++) sheet.autoSizeColumn(i);
+                    workbook.write(out);
+                    bytes = out.toByteArray();
+                }
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+                extension = "xlsx";
+            } else if ("PDF".equals(normalized)) {
+                try (PDDocument document = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    PDType1Font font = new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+                    List<String> lines = new ArrayList<>();
+                    lines.add(report.name() + " — " + report.resourceSlug());
+                    lines.add(String.join(" | ", columns));
+                    for (Map<String, Object> row : rows) {
+                        lines.add(columns.stream().map(key -> String.valueOf(row.getOrDefault(key, "")))
+                                .collect(Collectors.joining(" | ")));
+                    }
+                    int index = 0;
+                    while (index < lines.size() || (lines.isEmpty() && index == 0)) {
+                        PDPage page = new PDPage();
+                        document.addPage(page);
+                        try (PDPageContentStream stream = new PDPageContentStream(document, page)) {
+                            stream.beginText();
+                            stream.setFont(font, 8);
+                            stream.newLineAtOffset(36, 756);
+                            int count = 0;
+                            while (index < lines.size() && count < 55) {
+                                String line = lines.get(index++).replaceAll("[^\\x20-\\x7E]", "?");
+                                if (line.length() > 130) line = line.substring(0, 127) + "...";
+                                stream.showText(line);
+                                stream.newLineAtOffset(0, -13);
+                                count++;
+                            }
+                            stream.endText();
+                        }
+                        if (lines.isEmpty()) break;
+                    }
+                    document.save(out);
+                    bytes = out.toByteArray();
+                }
+                contentType = "application/pdf";
+                extension = "pdf";
+            } else {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "format must be CSV, XLSX, or PDF");
+            }
+            return ResponseEntity.ok().contentType(MediaType.parseMediaType(contentType))
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + safeFilename(report.name()) + "." + extension + "\"")
+                    .body(bytes);
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Unable to export report");
+        }
+    }
+
+    private static String csvCell(Object value) {
+        String text = value == null ? "" : value instanceof Map<?, ?> || value instanceof List<?>
+                ? value.toString() : String.valueOf(value);
+        return "\"" + text.replace("\"", "\"\"") + "\"";
+    }
+
+    private static String safeFilename(String value) {
+        return value.replaceAll("[^A-Za-z0-9_-]", "_");
     }
 
     @GetMapping("/measures")
