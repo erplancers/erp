@@ -63,16 +63,17 @@ public final class ReceivablesRiskModel {
     /** Preferred production variant; separates training and validation by a decision-time cutoff. */
     public static Result trainTimeOrdered(
             Dataset<Row> historicalInvoices, List<String> numericFeatures, String overdueLabel,
-            String decisionDateColumn, String trainThroughDate, double reviewThreshold,
-            String versionedModelPath) {
+            String decisionDateColumn, List<String> identifierColumns, String trainThroughDate,
+            double reviewThreshold, String versionedModelPath) {
         if (numericFeatures == null || numericFeatures.isEmpty()) throw new IllegalArgumentException("numericFeatures is required");
         if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
         if (!(reviewThreshold >= 0.0 && reviewThreshold <= 1.0)) throw new IllegalArgumentException("reviewThreshold must be in [0,1]");
         if (versionedModelPath == null || versionedModelPath.isBlank()) throw new IllegalArgumentException("versionedModelPath is required");
-        String[] selected = new String[numericFeatures.size() + 2];
-        for (int i = 0; i < numericFeatures.size(); i++) selected[i] = numericFeatures.get(i);
-        selected[numericFeatures.size()] = overdueLabel;
-        selected[numericFeatures.size() + 1] = decisionDateColumn;
+        java.util.LinkedHashSet<String> selectedSet = new java.util.LinkedHashSet<>(numericFeatures);
+        selectedSet.add(overdueLabel);
+        selectedSet.add(decisionDateColumn);
+        if (identifierColumns != null) selectedSet.addAll(identifierColumns);
+        String[] selected = selectedSet.toArray(String[]::new);
         SalesIntelligence.requireColumns(historicalInvoices, selected);
         Dataset<Row> clean = historicalInvoices.select(selected[0],
                 java.util.Arrays.copyOfRange(selected, 1, selected.length)).na().drop("any", selected);
