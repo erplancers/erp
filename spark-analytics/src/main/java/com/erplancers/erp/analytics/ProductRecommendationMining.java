@@ -37,7 +37,7 @@ public final class ProductRecommendationMining {
                         .and(functions.length(functions.col("transaction_key")).gt(0))
                         .and(functions.col("product_key").isNotNull())
                         .and(functions.length(functions.col("product_key")).gt(0))
-                        .and(functions.col("product_key").isNotNull()));
+                        .and(functions.length(functions.col("product_key")).gt(0)));
         Dataset<Row> interactions = clean.groupBy("transaction_key", "product_key")
                 .agg(functions.count(functions.lit(1)).cast("float").alias("rating"));
         long interactionCount = interactions.count();
