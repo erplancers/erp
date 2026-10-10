@@ -7,6 +7,8 @@ import java.util.stream.Collectors;
 import org.apache.spark.ml.clustering.KMeans;
 import org.apache.spark.ml.clustering.KMeansModel;
 import org.apache.spark.ml.feature.VectorAssembler;
+import org.apache.spark.ml.feature.StandardScaler;
+import org.apache.spark.ml.evaluation.ClusteringEvaluator;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
@@ -67,14 +69,20 @@ public final class CustomerSegmentationJob {
                 .setHandleInvalid("error");
         Dataset<Row> vectors = assembler.transform(clean);
 
+        StandardScaler scaler = new StandardScaler().setInputCol("features").setOutputCol("scaledFeatures")
+                .setWithMean(true).setWithStd(true);
+        Dataset<Row> scaled = scaler.fit(vectors).transform(vectors);
         KMeans algorithm = new KMeans()
                 .setK(clusters)
                 .setMaxIter(maxIterations)
                 .setSeed(42L)
-                .setFeaturesCol("features")
+                .setFeaturesCol("scaledFeatures")
                 .setPredictionCol("segment");
-        KMeansModel model = algorithm.fit(vectors);
-        Dataset<Row> scored = model.transform(vectors).select(customerIdColumn, "segment");
+        KMeansModel model = algorithm.fit(scaled);
+        Dataset<Row> clusterAssignments = model.transform(scaled);
+        double silhouette = new ClusteringEvaluator().setFeaturesCol("scaledFeatures")
+                .setPredictionCol("segment").setMetricName("silhouette").evaluate(clusterAssignments);
+        Dataset<Row> scored = clusterAssignments.select(customerIdColumn, "segment");
 
         // Save atomically at the storage layer where supported; use versioned paths in production.
         model.write().overwrite().save(modelOutputPath);
@@ -88,6 +96,7 @@ public final class CustomerSegmentationJob {
                 .collect(Collectors.toList());
 
         return new MiningResult("k-means-customer-segmentation", rows,
-                summaries.size(), summaries, modelOutputPath);
+                summaries.size(), summaries, modelOutputPath, Map.of("silhouette", silhouette,
+                "clusters", clusters, "maxIterations", maxIterations, "featureColumns", List.copyOf(featureColumns)));
     }
 }
