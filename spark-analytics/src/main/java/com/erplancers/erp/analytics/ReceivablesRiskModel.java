@@ -29,7 +29,7 @@ public final class ReceivablesRiskModel {
     public static Result train(
             Dataset<Row> historicalInvoices, List<String> numericFeatures,
             String overdueLabel, double reviewThreshold, double trainFraction,
-            String versionedModelPath) {
+            String versionedModelPath) throws java.io.IOException {
         if (numericFeatures == null || numericFeatures.isEmpty()) throw new IllegalArgumentException("numericFeatures is required");
         if (!(reviewThreshold >= 0.0 && reviewThreshold <= 1.0)) throw new IllegalArgumentException("reviewThreshold must be in [0,1]");
         if (!(trainFraction >= 0.5 && trainFraction < 0.95)) throw new IllegalArgumentException("trainFraction must be in [0.5,0.95)");
@@ -55,7 +55,7 @@ public final class ReceivablesRiskModel {
         ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, overdueLabel);
         Dataset<Row> reviewQueue = humanReviewQueue(predictions, reviewThreshold);
         model.write().overwrite().save(versionedModelPath);
-        return new Result(model, reviewQueue, split[0].select(numericFeatures.toArray(String[]::new)),
+        return new Result(model, reviewQueue, SalesIntelligence.selectColumns(split[0], numericFeatures.toArray(String[]::new)),
                 quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(),
                 trainRows, validationRows, reviewThreshold);
     }
@@ -86,7 +86,7 @@ public final class ReceivablesRiskModel {
 
     private static Result fitTimeOrdered(Dataset<Row> train, Dataset<Row> validation,
                                          List<String> numericFeatures, String overdueLabel,
-                                         double reviewThreshold, String modelPath) {
+                                         double reviewThreshold, String modelPath) throws java.io.IOException {
         long trainRows = train.count(), validationRows = validation.count();
         if (trainRows < 50 || validationRows < 10) {
             throw new IllegalArgumentException("Need at least 50 training and 10 later-date validation invoices");
@@ -100,14 +100,14 @@ public final class ReceivablesRiskModel {
         ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, overdueLabel);
         Dataset<Row> reviewQueue = humanReviewQueue(predictions, reviewThreshold);
         model.write().overwrite().save(modelPath);
-        return new Result(model, reviewQueue, train.select(numericFeatures.toArray(String[]::new)),
+        return new Result(model, reviewQueue, SalesIntelligence.selectColumns(train, numericFeatures.toArray(String[]::new)),
                 quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(),
                 trainRows, validationRows, reviewThreshold);
     }
 
     private static Dataset<Row> humanReviewQueue(Dataset<Row> predictions, double reviewThreshold) {
         return predictions
-                .withColumn("overdue_risk_score", org.apache.spark.ml.functions.vector_to_array(col("probability")).getItem(1))
+                .withColumn("overdue_risk_score", org.apache.spark.ml.functions.vector_to_array(col("probability"), "float64").getItem(1))
                 .withColumn("human_review_required", col("overdue_risk_score").geq(lit(reviewThreshold)))
                 .withColumn("recommended_action", lit("HUMAN_REVIEW_ONLY"))
                 .drop("features", "rawPrediction", "probability");
