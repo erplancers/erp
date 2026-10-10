@@ -1,0 +1,39 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.erplancers'
+version = '0.0.1-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
+    implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
+    implementation 'org.postgresql:postgresql:42.7.7'
+    // Filesystem connectors used by protected HDFS/S3-compatible/Azure artifact stores.
+    implementation 'org.apache.hadoop:hadoop-aws:3.4.1'
+    implementation 'org.apache.hadoop:hadoop-azure:3.4.1'
+    testImplementation platform('org.junit:junit-bom:5.12.2')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+tasks.register('runWorker', JavaExec) {
+    group = 'application'
+    description = 'Run the standalone Spark analytics worker'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
