@@ -47,11 +47,16 @@ public final class SalesIntelligence {
                 .withColumn("_purchase_month", trunc(to_date(col(orderDate)), "month"));
         Dataset<Row> first = valid.groupBy(col(customer))
                 .agg(min(col("_purchase_month")).alias("cohort_month"));
-        return valid.join(first, customer)
+        Dataset<Row> cohortSizes = first.groupBy(col("cohort_month"))
+                .agg(countDistinct(col(customer)).alias("cohort_size"));
+        Dataset<Row> monthlyActive = valid.join(first, customer)
                 .withColumn("months_since_cohort",
                         greatest(lit(0), months_between(col("_purchase_month"), col("cohort_month")).cast("int")))
                 .groupBy(col("cohort_month"), col("months_since_cohort"))
-                .agg(countDistinct(col(customer)).alias("active_customers"))
+                .agg(countDistinct(col(customer)).alias("active_customers"));
+        return monthlyActive.join(cohortSizes, "cohort_month")
+                .withColumn("retention_rate",
+                        col("active_customers").cast("double").divide(col("cohort_size")))
                 .orderBy(col("cohort_month"), col("months_since_cohort"));
     }
 
