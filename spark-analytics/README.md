@@ -21,6 +21,7 @@ Spark does not execute inside ordinary ERP CRUD HTTP requests. The current imple
 | `MARKET_BASKET` | `order_lines` | FP-Growth frequent itemsets and association rules |
 | `RECEIVABLES_RISK` | `receivables` | Time-split overdue-risk scoring, holdout metrics, and a human-review queue only |
 | `DATA_DRIFT` | Same dataset as the trained model | PSI per feature against a saved baseline; scheduled daily for eligible production models |
+| `MODEL_SCORING` | Same dataset as the trained model | Scores current rows with a specified, promoted pipeline version; writes tenant-scoped Parquet results |
 
 ### Model-quality guardrails
 
@@ -75,7 +76,7 @@ Use different credentials for the metadata/control plane and the row-extraction 
 1. `ANALYTICS_METADATA_USER` needs the limited INSERT/UPDATE/SELECT permissions required on analytics metadata tables. It is not the source-data extraction account.
 2. `ANALYTICS_READ_USER` must be a read-only account. Grant `SELECT` only on approved views and read access to `analytics_tenant_grant` and `analytics_scope_grant`; do not grant write access to ERP tables. The worker sets each Spark JDBC session to read-only.
 3. Network rules should allow the worker to reach PostgreSQL and the protected artifact store only. Do not expose Spark master, driver or Spark UI ports publicly.
-4. Use a dedicated secret manager in deployment; never commit passwords or filled-in production dataset configuration to this repository.
+4. Use a dedicated secret manager in deployment; never commit passwords or filled-in production dataset configuration to this repository. For S3A/ABFS, configure workload identity/credential providers and endpoint settings through protected Hadoop configuration; do not hard-code cloud secrets in code or the example properties.
 
 The metadata schema migration shown here creates tables; it does **not** create DB roles, grants or production entity mappings for you. Validate these grants with a non-admin account before production.
 
@@ -92,7 +93,7 @@ Available environment variables:
 | `ANALYTICS_READ_JDBC_URL` | PostgreSQL URL for approved source views and grants |
 | `ANALYTICS_READ_USER`, `ANALYTICS_READ_PASSWORD` | Read-only extraction credentials |
 | `ANALYTICS_DATASETS_CONFIG` | Path to the protected, operator-managed source catalogue |
-| `ANALYTICS_ARTIFACT_URI` | Protected URI root; supported examples `file:`, `hdfs:`, `s3a:`, `abfs:` |
+| `ANALYTICS_ARTIFACT_URI` | Protected URI root; supported schemes `file:`, `hdfs:`, `s3a:`, `abfs:`; cloud connectors are bundled |
 | `SPARK_MASTER` | Spark master URL, default `local[*]`; set cluster master in production |
 | `ANALYTICS_WORKER_ID` | Optional unique worker identifier |
 | `ANALYTICS_IDLE_POLL_MS` | Queue idle sleep (250–60000), default 1000 |
@@ -117,7 +118,7 @@ Run it as a dedicated service identity with bounded CPU/memory, concurrency cont
 
 `receivables`: `customer_id`, `invoice_id`, `due_date`, `paid_date`, `invoice_amount`, `overdue_label`; the time-split risk model uses `due_date` as decision-date cutoff. Feature columns must be values known at that decision time, not post-outcome fields. Prefer leakage-reviewed features such as invoice amount, terms and strictly historical payment behavior.
 
-The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. Build approved SQL views in staging and confirm all aliases, historical labels, joins, currencies, deleted records and document lifecycle statuses before use.
+The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. The inventory template includes optional `recent_demand`, `on_hand`, `lead_time_days`, and `stockout_label` fields for supervised stock-out training. The receivables template includes leakage-reviewed aliases for historical overdue rate, payment delay and payment terms. Build approved SQL views in staging and confirm all aliases, historical labels, joins, currencies, deleted records and document lifecycle statuses before use.
 
 ## API overview
 
@@ -127,9 +128,10 @@ All endpoints are under `/api/analytics` and follow the app's configured basic a
 - `GET /jobs?tenantId=...` — list the caller's own jobs in that tenant; optional `status`.
 - `GET /jobs/{id}?tenantId=...` — show own job.
 - `POST /jobs/{id}/cancel?tenantId=...` — cancel a queued job or request cancellation of a running job.
-- `GET /models?tenantId=...` — model-version registry.
+- `GET /models?tenantId=...` — model-version registry. Analysts see their own model metadata; separately authorized model operators can inspect registry-wide models in the tenant.
 - `GET /experiments?tenantId=...` — recorded experiment runs for the caller.
 - `GET /drift?tenantId=...` — drift metrics.
+- Submit `MODEL_SCORING` on the same dataset as the deployed pipeline with `modelName` and `modelVersion` parameters to write scored rows to protected artifact storage.
 - `POST /models/{name}/{version}/review?tenantId=...` — approve/reject candidate.
 - `POST /models/{name}/{version}/promote?tenantId=...` — promote a validated model.
 - `POST /models/{name}/{version}/rollback?tenantId=...` — reactivate a retired version.
@@ -188,7 +190,8 @@ These payloads require actual grants, configured policy rules, and source aliase
 
 - **Idempotency/retries:** the DB unique key and queue leases prevent duplicate claims; transient failures retry with bounded exponential delay. Verify database time and lease behavior under process kill/restart.
 - **Artifact isolation:** outputs are tenant/job scoped; deploy with private storage, encryption at rest, retention, backups, and per-tenant access policies. The metadata API should not hand out arbitrary file URIs to browsers.
-- **Data access:** filtering is evaluated in PostgreSQL at worker execution time. Revoked/mutated scopes change the grant fingerprint, so a drift comparison refuses to use a baseline from different scopes; retrain under the new authorized scope.
+- **Data access:** filtering is evaluated in PostgreSQL at worker execution time. Each job materializes its scoped JDBC result once in worker-local disk cache so repeated Spark actions use the same extract; the cache is released after the job. The source rows are not retained as a durable snapshot. Lineage retains the source mapping, extraction time and scope fingerprint; for stronger long-term reproducibility, feed immutable database snapshots or versioned views into the platform.
+- **Mapping integrity:** model manifests bind the source table, selected source-column aliases, tenant column, scope column/type and active scope grant fingerprint. Scoring/drift jobs fail closed if any of them differ from the training mapping. Model and drift metadata is scoped to its creator unless a separately authorized model operator accesses it.
 - **Auditability:** experiment inputs, model manifests, metrics, reviewers and model lifecycle events are persisted. Protect database backups and restrict direct metadata-table writes.
 - **Monitoring:** scrape application/worker metrics and logs externally; alert on queue age, retries, dead jobs, lease loss, Spark failures, model quality and PSI alerts. PSI measurements are available via the drift API.
 - **Data lineage:** manifests record tenant/model/job/dataset, parameters, Spark version, input-source reference, scope fingerprint, output URI, and metrics. Pin source snapshot/view version and artifact checksums in a mature production deployment.
