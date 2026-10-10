@@ -60,7 +60,7 @@ public final class ScopedPostgresReader {
 
         // Values originate from authenticated identity/queue records and are still escaped as SQL literals.
         // Identifiers are never supplied by the API and are validated by AnalyticsDatasetCatalog.
-        String query = "SELECT " + projections + " FROM " + table + " src WHERE " + tenantColumn + " = " + tenant
+        String query = "SELECT " + projections + " FROM " + table + " src WHERE CAST(" + tenantColumn + " AS VARCHAR) = " + tenant
                 + " AND EXISTS (SELECT 1 FROM analytics_tenant_grant tg WHERE tg.username = " + username
                 + " AND tg.tenant_id = " + tenant + " AND tg.active = TRUE)"
                 + " AND EXISTS (SELECT 1 FROM analytics_scope_grant sg WHERE sg.username = " + username
