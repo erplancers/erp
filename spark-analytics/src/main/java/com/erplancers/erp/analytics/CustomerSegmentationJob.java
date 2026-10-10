@@ -29,7 +29,7 @@ public final class CustomerSegmentationJob {
             int clusters,
             int maxIterations,
             String modelOutputPath,
-            String resultOutputPath) {
+            String resultOutputPath) throws java.io.IOException {
 
         if (input == null) throw new IllegalArgumentException("input is required");
         if (featureColumns == null || featureColumns.isEmpty()) {
