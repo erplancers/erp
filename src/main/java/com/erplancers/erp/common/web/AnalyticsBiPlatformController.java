@@ -240,8 +240,10 @@ public class AnalyticsBiPlatformController {
 
     private byte[] csv(List<Map<String, Object>> rows) {
         List<String> columns = columns(rows);
-        StringBuilder out = new StringBuilder("\uFEFF").append(columns.stream().map(this::csvCell).collect(Collectors.joining(","))).append("\r\n");
-        for (Map<String, Object> row : rows) out.append(columns.stream().map(c -> csvCell(row.get(c))).collect(Collectors.joining(","))).append("\r\n");
+        StringBuilder out = new StringBuilder("\uFEFF").append(columns.stream().map(this::csvCell).collect(Collectors.joining(","))).append("\r
+");
+        for (Map<String, Object> row : rows) out.append(columns.stream().map(c -> csvCell(row.get(c))).collect(Collectors.joining(","))).append("\r
+");
         return out.toString().getBytes(StandardCharsets.UTF_8);
     }
 
@@ -294,7 +296,11 @@ public class AnalyticsBiPlatformController {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception e) { throw new IllegalStateException(e); }
     }
-    private ErpBiEngine.BiReport readBiReport(String value) {\n        try { return mapper.readValue(value, ErpBiEngine.BiReport.class); }\n        catch (Exception e) { throw new IllegalStateException("Cached BI result is invalid", e); }\n    }\n    private ErpBiEngine.BiQuery readQuery(String value) {
+    private ErpBiEngine.BiReport readBiReport(String value) {
+        try { return mapper.readValue(value, ErpBiEngine.BiReport.class); }
+        catch (Exception e) { throw new IllegalStateException("Cached BI result is invalid", e); }
+    }
+    private ErpBiEngine.BiQuery readQuery(String value) {
         try { return mapper.readValue(value, ErpBiEngine.BiQuery.class); }
         catch (Exception e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Saved report query is invalid"); }
     }
