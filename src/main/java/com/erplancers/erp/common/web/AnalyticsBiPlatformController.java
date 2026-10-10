@@ -240,10 +240,8 @@ public class AnalyticsBiPlatformController {
 
     private byte[] csv(List<Map<String, Object>> rows) {
         List<String> columns = columns(rows);
-        StringBuilder out = new StringBuilder("\uFEFF").append(columns.stream().map(this::csvCell).collect(Collectors.joining(","))).append("\r
-");
-        for (Map<String, Object> row : rows) out.append(columns.stream().map(c -> csvCell(row.get(c))).collect(Collectors.joining(","))).append("\r
-");
+        StringBuilder out = new StringBuilder("\uFEFF").append(columns.stream().map(this::csvCell).collect(Collectors.joining(","))).append("\r\n");
+        for (Map<String, Object> row : rows) out.append(columns.stream().map(c -> csvCell(row.get(c))).collect(Collectors.joining(","))).append("\r\n");
         return out.toString().getBytes(StandardCharsets.UTF_8);
     }
 
