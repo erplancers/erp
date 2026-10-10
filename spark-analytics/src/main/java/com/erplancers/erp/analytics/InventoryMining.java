@@ -18,9 +18,9 @@ import org.apache.spark.sql.functions;
 public final class InventoryMining {
     private InventoryMining() {}
 
-    public record ForecastResult(PipelineModel model, Dataset<Row> predictions,
+    public record ForecastResult(PipelineModel model, Dataset<Row> predictions, Dataset<Row> baselineFeatures,
                                  double rmse, double mae, long trainingRows, long holdoutRows) {}
-    public record StockoutResult(PipelineModel model, Dataset<Row> predictions,
+    public record StockoutResult(PipelineModel model, Dataset<Row> predictions, Dataset<Row> baselineFeatures,
                                  double areaUnderRoc, long trainingRows, long holdoutRows) {}
 
     public static ForecastResult forecastDemand(
@@ -29,15 +29,7 @@ public final class InventoryMining {
         SalesIntelligence.requireColumns(dailyDemand, product, warehouse, day, quantity);
         if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
         if (modelPath == null || modelPath.isBlank()) throw new IllegalArgumentException("modelPath is required");
-        var window = Window.partitionBy(product, warehouse).orderBy(functions.to_date(functions.col(day)));
-        Dataset<Row> features = dailyDemand
-                .filter(functions.col(product).isNotNull().and(functions.col(warehouse).isNotNull())
-                        .and(functions.col(day).isNotNull()).and(functions.col(quantity).isNotNull()))
-                .withColumn("_lag_1", functions.lag(functions.col(quantity), 1).over(window))
-                .withColumn("_lag_7", functions.lag(functions.col(quantity), 7).over(window))
-                .withColumn("_lag_14", functions.lag(functions.col(quantity), 14).over(window))
-                .withColumn("_day_of_week", functions.dayofweek(functions.to_date(functions.col(day))).cast("double"))
-                .na().drop("any", new String[]{"_lag_1", "_lag_7", "_lag_14"});
+        Dataset<Row> features = demandFeatureFrame(dailyDemand, product, warehouse, day, quantity);
         String[] inputs = {"_lag_1", "_lag_7", "_lag_14", "_day_of_week"};
         Dataset<Row> train = features.filter(functions.to_date(functions.col(day))
                 .leq(functions.to_date(functions.lit(trainThroughDate))));
@@ -56,7 +48,7 @@ public final class InventoryMining {
         double rmse = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("rmse").evaluate(predictions);
         double mae = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("mae").evaluate(predictions);
         model.write().overwrite().save(modelPath);
-        return new ForecastResult(model, predictions, rmse, mae, trainCount, testCount);
+        return new ForecastResult(model, predictions, train.select(inputs), rmse, mae, trainCount, testCount);
     }
 
     /**
@@ -89,7 +81,23 @@ public final class InventoryMining {
         double auc = new org.apache.spark.ml.evaluation.BinaryClassificationEvaluator()
                 .setLabelCol(labelColumn).setRawPredictionCol("rawPrediction").setMetricName("areaUnderROC").evaluate(predictions);
         model.write().overwrite().save(modelPath);
-        return new StockoutResult(model, predictions, auc, trainCount, holdoutCount);
+        return new StockoutResult(model, predictions, split[0].select(featureColumns.toArray(String[]::new)), auc, trainCount, holdoutCount);
+    }
+
+
+    /** Deterministic lag-feature transformation reused by training and drift monitoring. */
+    public static Dataset<Row> demandFeatureFrame(
+            Dataset<Row> dailyDemand, String product, String warehouse, String day, String quantity) {
+        SalesIntelligence.requireColumns(dailyDemand, product, warehouse, day, quantity);
+        var window = Window.partitionBy(product, warehouse).orderBy(functions.to_date(functions.col(day)));
+        return dailyDemand
+                .filter(functions.col(product).isNotNull().and(functions.col(warehouse).isNotNull())
+                        .and(functions.col(day).isNotNull()).and(functions.col(quantity).isNotNull()))
+                .withColumn("_lag_1", functions.lag(functions.col(quantity), 1).over(window))
+                .withColumn("_lag_7", functions.lag(functions.col(quantity), 7).over(window))
+                .withColumn("_lag_14", functions.lag(functions.col(quantity), 14).over(window))
+                .withColumn("_day_of_week", functions.dayofweek(functions.to_date(functions.col(day))).cast("double"))
+                .na().drop("any", new String[]{"_lag_1", "_lag_7", "_lag_14"});
     }
 
     /** Finds unusually high/low demand vs the previous 28 observations for each item/location. */
