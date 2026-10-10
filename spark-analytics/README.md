@@ -15,6 +15,7 @@ Spark does not execute inside ordinary ERP CRUD HTTP requests. The current imple
 | `COHORT_ANALYSIS` | `sales_orders` | Cohort month × age-month retention counts |
 | `CUSTOMER_LIFETIME_VALUE` | `sales_orders` | Historical revenue and annualized observed revenue estimate; **not** a discounted predictive CLV |
 | `CUSTOMER_SEGMENTATION` | `sales_orders` | Scaled K-means segments, silhouette metric, saved pipeline, and predictions |
+| `CUSTOMER_CHURN_RISK` | `sales_orders` | Time-ordered churn/retention propensity using logistic regression, random forest, or gradient-boosted trees; AUC/precision/recall and a human-review queue |
 | `DEMAND_FORECAST` | `inventory_daily` | Lag-feature regression with an out-of-time validation set and RMSE/MAE/R² |
 | `STOCKOUT_RISK` | `inventory_daily` | Time-ordered labelled logistic regression and AUC/precision/recall |
 | `INVENTORY_ANOMALY` | `inventory_daily` | Rolling 28-observation demand anomalies using z-scores |
@@ -27,6 +28,8 @@ Spark does not execute inside ordinary ERP CRUD HTTP requests. The current imple
 
 - Train/validation split is time-based for demand forecasting, stock-out risk, and receivables risk to reduce temporal leakage. Historical data must have an honest business date and label definition.
 - Receivables output is decision support only. It emits `HUMAN_REVIEW_ONLY`; it must not automatically reject customers, change payment terms, or block orders.
+- Churn propensity output is decision support only. It emits `RETENTION_REVIEW_ONLY`; it must not automatically change pricing, terminate accounts, or trigger customer communications.
+- `CUSTOMER_CHURN_RISK` requires the operator-managed `sales_orders` view to expose a meaningful binary `churn_label` and numeric feature aliases. The label must be defined at a real decision date; exclude post-decision fields and future outcomes from features. Train/holdout separation is based on `order_date`, and at least 50 training and 10 later-date holdout rows are required.
 - Historical annualized revenue is explicitly not presented as predictive CLV.
 - PSI's 0.25 alert default is an operational heuristic, not universal statistical proof of drift. Calibrate it against feature distributions and business impact.
 - An artifact is first registered as `CANDIDATE`. A separately authorized reviewer must validate it before promotion. Promotion retires the previous production version in the same DB transaction. Rollback promotes a previously retired version and writes an audit record.
@@ -110,7 +113,7 @@ Run it as a dedicated service identity with bounded CPU/memory, concurrency cont
 
 ### Source aliases required by built-in jobs
 
-`sales_orders`: `customer_id`, `order_id`, `order_date`, `net_amount`.
+`sales_orders`: `customer_id`, `order_id`, `order_date`, `net_amount`. For `CUSTOMER_CHURN_RISK`, also expose `churn_label` (binary 0/1) and any numeric feature aliases selected in the job request; the example UI uses `net_amount` only as a starter feature and is not a recommended production feature set.
 
 `order_lines`: `transaction_id`, `product_id` (transaction IDs should be unique within a tenant scope; the reader's allowed contact scopes filter input rows).
 
