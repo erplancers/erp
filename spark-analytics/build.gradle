@@ -12,6 +12,7 @@ repositories {
 dependencies {
     implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
     implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
+    implementation 'org.postgresql:postgresql:42.7.7'
     testImplementation platform('org.junit:junit-bom:5.12.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
@@ -20,6 +21,13 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
     }
+}
+
+tasks.register('runWorker', JavaExec) {
+    group = 'application'
+    description = 'Run the standalone Spark analytics worker'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
 }
 
 tasks.named('test') {
