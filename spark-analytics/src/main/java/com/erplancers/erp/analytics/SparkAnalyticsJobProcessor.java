@@ -16,12 +16,15 @@ import java.util.stream.Collectors;
 public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
     private final AnalyticsDatasetCatalog catalog;
     private final ScopedPostgresReader reader;
+    private final AnalyticsJobStore store;
     private final String artifactRoot;
     private final ObjectMapper json = new ObjectMapper();
 
-    public SparkAnalyticsJobProcessor(AnalyticsDatasetCatalog catalog, ScopedPostgresReader reader, String artifactRoot) {
+    public SparkAnalyticsJobProcessor(AnalyticsDatasetCatalog catalog, ScopedPostgresReader reader,
+                                      AnalyticsJobStore store, String artifactRoot) {
         this.catalog = Objects.requireNonNull(catalog);
         this.reader = Objects.requireNonNull(reader);
+        this.store = Objects.requireNonNull(store);
         if (artifactRoot == null || artifactRoot.isBlank()) throw new IllegalArgumentException("ANALYTICS_ARTIFACT_URI is required");
         this.artifactRoot = artifactRoot.replaceAll("/+$", "");
         if (!(this.artifactRoot.startsWith("file:") || this.artifactRoot.startsWith("hdfs:")
@@ -41,6 +44,9 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         Map<String, Object> metrics = new LinkedHashMap<>();
         String algorithm = job.jobType();
         String modelPath = null;
+        String baselinePath = null;
+        List<String> modelFeatureColumns = List.of();
+        List<DriftObservation> driftObservations = List.of();
         String outputPath;
 
         switch (job.jobType()) {
@@ -82,6 +88,10 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                         maxIterations, modelPath, predictionsPath);
                 metrics.put("rows", result.inputRows());
                 metrics.put("segments", result.summaries());
+                metrics.putAll(result.metrics());
+                baselinePath = output + "/monitoring-baseline";
+                write(rfm.select(features.toArray(String[]::new)), baselinePath);
+                modelFeatureColumns = features;
                 metrics.put("modelPath", modelPath);
                 outputPath = predictionsPath;
                 algorithm = "k-means-customer-segmentation";
@@ -94,6 +104,10 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 outputPath = write(result.predictions(), output + "/forecast-holdout");
                 metrics.put("rmse", result.rmse());
                 metrics.put("mae", result.mae());
+                metrics.put("r2", result.r2());
+                baselinePath = output + "/monitoring-baseline";
+                write(result.baselineFeatures(), baselinePath);
+                modelFeatureColumns = List.of("_lag_1", "_lag_7", "_lag_14", "_day_of_week");
                 metrics.put("trainingRows", result.trainingRows());
                 metrics.put("holdoutRows", result.holdoutRows());
                 metrics.put("predictionsPath", outputPath);
@@ -106,10 +120,15 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 requireAliases(source, features);
                 requireAliases(source, List.of(label));
                 modelPath = output + "/model";
-                InventoryMining.StockoutResult result = InventoryMining.trainStockoutRisk(source,
-                        features, label, doubleParameter(p, "trainFraction", 0.8, 0.5, 0.94), modelPath);
+                InventoryMining.StockoutResult result = InventoryMining.trainStockoutRiskTimeOrdered(source,
+                        features, label, "demand_date", requiredString(p, "trainThroughDate"), modelPath);
                 outputPath = write(result.predictions(), output + "/stockout-risk");
                 metrics.put("areaUnderRoc", result.areaUnderRoc());
+                metrics.put("weightedPrecision", result.weightedPrecision());
+                metrics.put("weightedRecall", result.weightedRecall());
+                baselinePath = output + "/monitoring-baseline";
+                write(result.baselineFeatures(), baselinePath);
+                modelFeatureColumns = features;
                 metrics.put("trainingRows", result.trainingRows());
                 metrics.put("holdoutRows", result.holdoutRows());
                 metrics.put("predictionsPath", outputPath);
@@ -148,8 +167,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 requireAliases(source, List.of(label));
                 double threshold = doubleParameter(p, "reviewThreshold", 0.65, 0.0, 1.0);
                 modelPath = output + "/model";
-                ReceivablesRiskModel.Result result = ReceivablesRiskModel.train(source, features, label,
-                        threshold, doubleParameter(p, "trainFraction", 0.8, 0.5, 0.94), modelPath);
+                ReceivablesRiskModel.Result result = ReceivablesRiskModel.trainTimeOrdered(source, features, label,
+                        "due_date", requiredString(p, "trainThroughDate"), threshold, modelPath);
                 outputPath = write(result.reviewQueue(), output + "/receivables-review-queue");
                 metrics.put("areaUnderRoc", result.areaUnderRoc());
                 metrics.put("trainingRows", result.trainingRows());
@@ -157,8 +176,56 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("reviewThreshold", result.reviewThreshold());
                 metrics.put("decisionPolicy", "HUMAN_REVIEW_ONLY");
                 metrics.put("reviewQueuePath", outputPath);
+                metrics.put("weightedPrecision", result.weightedPrecision());
+                metrics.put("weightedRecall", result.weightedRecall());
+                baselinePath = output + "/monitoring-baseline";
+                write(result.baselineFeatures(), baselinePath);
+                modelFeatureColumns = features;
                 metrics.put("modelPath", modelPath);
                 algorithm = "overdue-payment-logistic-regression-human-review";
+            }
+            case "DATA_DRIFT" -> {
+                String modelName = requiredString(p, "modelName");
+                int version = intParameter(p, "modelVersion", 1, 1, Integer.MAX_VALUE);
+                AnalyticsJobStore.ModelVersion model = store.findModelVersion(job.tenantId(), modelName, version);
+                if (model == null) throw new IllegalArgumentException("Model version not found in this tenant");
+                if (!"PRODUCTION".equals(model.status())) throw new IllegalArgumentException("Drift checks require the current PRODUCTION model version");
+                var manifestNode = json.readTree(model.manifestJson());
+                if (!job.datasetKey().equals(manifestNode.path("datasetKey").asText())) {
+                    throw new SecurityException("Dataset key does not match model training dataset");
+                }
+                String baselineUri = manifestNode.path("baselineUri").asText("");
+                if (baselineUri.isBlank()) throw new IllegalArgumentException("This model version has no numeric drift baseline");
+                List<String> features = stringList(p, "featureColumns",
+                        readStringArray(manifestNode.path("featureColumns").toString()));
+                List<String> trainedFeatures = readStringArray(manifestNode.path("featureColumns").toString());
+                if (trainedFeatures.isEmpty() || !trainedFeatures.containsAll(features)) {
+                    throw new IllegalArgumentException("Drift features must be a subset of model baseline features");
+                }
+                Dataset<Row> baseline = source.sparkSession().read().parquet(baselineUri);
+                Dataset<Row> current;
+                switch (modelName) {
+                    case "customer_segmentation" -> current = SalesIntelligence.rfm(source, "customer_id", "order_id",
+                            "order_date", "net_amount", dateParameter(p, "asOfDate"));
+                    case "demand_forecast" -> current = InventoryMining.demandFeatureFrame(source,
+                            "product_id", "warehouse_id", "demand_date", "demand_qty");
+                    case "stockout_risk", "receivables_risk" -> current = source;
+                    default -> throw new IllegalArgumentException("Drift monitoring is not configured for model: " + modelName);
+                }
+                double alertThreshold = doubleParameter(p, "alertThreshold", 0.25, 0.01, 10.0);
+                List<ModelMonitoring.DriftMetric> drift = ModelMonitoring.populationStabilityIndex(
+                        baseline, current, features, alertThreshold);
+                driftObservations = drift.stream().map(metric -> new DriftObservation(modelName, version,
+                        metric.feature(), metric.populationStabilityIndex(), metric.status(),
+                        metric.baselineNonNullRows(), metric.currentNonNullRows(), baselineUri, inputEvidence)).toList();
+                metrics.put("modelName", modelName);
+                metrics.put("modelVersion", version);
+                metrics.put("driftMetrics", drift.stream().map(metric -> Map.of(
+                        "feature", metric.feature(), "psi", metric.populationStabilityIndex(),
+                        "status", metric.status(), "baselineRows", metric.baselineNonNullRows(),
+                        "currentRows", metric.currentNonNullRows())).toList());
+                outputPath = output + "/drift-report.json";
+                algorithm = "population-stability-index";
             }
             default -> throw new IllegalArgumentException("Unsupported analytics job type: " + job.jobType());
         }
@@ -168,13 +235,15 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 "modelType", algorithm, "jobId", job.id(), "tenantId", job.tenantId(),
                 "datasetKey", job.datasetKey(), "sparkVersion", source.sparkSession().version(),
                 "createdAt", Instant.now().toString(), "parameters", p, "metrics", metrics,
-                "inputEvidence", inputEvidence, "outputPath", outputPath));
+                "inputEvidence", inputEvidence, "outputPath", outputPath,
+                "baselineUri", baselinePath == null ? "" : baselinePath,
+                "featureColumns", modelFeatureColumns));
         String resultJson = json.writeValueAsString(Map.of(
                 "jobId", job.id(), "algorithm", algorithm, "metrics", metrics,
                 "outputPath", outputPath, "modelPath", modelPath == null ? "" : modelPath,
                 "humanReviewRequired", job.jobType().equals("RECEIVABLES_RISK")));
         return new JobResult(resultJson, algorithm, job.parametersJson(), json.writeValueAsString(metrics),
-                inputEvidence, modelPath, manifest);
+                inputEvidence, modelPath, manifest, driftObservations);
     }
 
     private static String write(Dataset<Row> dataset, String path) {
@@ -223,6 +292,10 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         double value = n.doubleValue();
         if (!Double.isFinite(value) || value < min || value > max) throw new IllegalArgumentException("Out-of-range parameter: " + name);
         return value;
+    }
+
+    private List<String> readStringArray(String arrayJson) throws IOException {
+        return json.readValue(arrayJson, new TypeReference<List<String>>() {});
     }
 
     private static List<String> stringList(Map<String, Object> p, String name, List<String> fallback) {
