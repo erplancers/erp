@@ -161,7 +161,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
             }
             case "RECEIVABLES_RISK" -> {
                 List<String> features = stringList(p, "featureColumns",
-                        List.of("invoice_amount", "days_past_due", "customer_overdue_rate", "invoice_age_days"));
+                        List.of("invoice_amount", "customer_overdue_rate", "historical_average_payment_delay", "payment_terms_days"));
                 String label = stringParameter(p, "labelColumn", "overdue_label");
                 requireAliases(source, features);
                 requireAliases(source, List.of(label));
@@ -173,6 +173,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("areaUnderRoc", result.areaUnderRoc());
                 metrics.put("trainingRows", result.trainingRows());
                 metrics.put("validationRows", result.validationRows());
+                metrics.put("weightedPrecision", result.weightedPrecision());
+                metrics.put("weightedRecall", result.weightedRecall());
                 metrics.put("reviewThreshold", result.reviewThreshold());
                 metrics.put("decisionPolicy", "HUMAN_REVIEW_ONLY");
                 metrics.put("reviewQueuePath", outputPath);
@@ -224,20 +226,21 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                         "feature", metric.feature(), "psi", metric.populationStabilityIndex(),
                         "status", metric.status(), "baselineRows", metric.baselineNonNullRows(),
                         "currentRows", metric.currentNonNullRows())).toList());
-                outputPath = output + "/drift-report.json";
+                outputPath = "postgresql:analytics_drift_metric";
                 algorithm = "population-stability-index";
             }
             default -> throw new IllegalArgumentException("Unsupported analytics job type: " + job.jobType());
         }
 
         context.checkCancellation();
-        String manifest = json.writeValueAsString(Map.of(
-                "modelType", algorithm, "jobId", job.id(), "tenantId", job.tenantId(),
-                "datasetKey", job.datasetKey(), "sparkVersion", source.sparkSession().version(),
-                "createdAt", Instant.now().toString(), "parameters", p, "metrics", metrics,
-                "inputEvidence", inputEvidence, "outputPath", outputPath,
-                "baselineUri", baselinePath == null ? "" : baselinePath,
-                "featureColumns", modelFeatureColumns));
+        String manifest = json.writeValueAsString(Map.ofEntries(
+                Map.entry("modelType", algorithm), Map.entry("jobId", job.id()),
+                Map.entry("tenantId", job.tenantId()), Map.entry("createdBy", job.requestedBy()),
+                Map.entry("datasetKey", job.datasetKey()), Map.entry("sparkVersion", source.sparkSession().version()),
+                Map.entry("createdAt", Instant.now().toString()), Map.entry("parameters", p),
+                Map.entry("metrics", metrics), Map.entry("inputEvidence", inputEvidence),
+                Map.entry("outputPath", outputPath), Map.entry("baselineUri", baselinePath == null ? "" : baselinePath),
+                Map.entry("featureColumns", modelFeatureColumns)));
         String resultJson = json.writeValueAsString(Map.of(
                 "jobId", job.id(), "algorithm", algorithm, "metrics", metrics,
                 "outputPath", outputPath, "modelPath", modelPath == null ? "" : modelPath,
