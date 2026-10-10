@@ -35,20 +35,21 @@ public class AnalyticsJobController {
             "MARKET_BASKET", "RECEIVABLES_RISK");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
-                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET")),
-            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY")),
+                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET", "DATA_DRIFT")),
+            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
-            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK")));
+            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.of(
             "RFM", Set.of("asOfDate"),
             "COHORT_ANALYSIS", Set.of(),
             "CUSTOMER_LIFETIME_VALUE", Set.of(),
             "CUSTOMER_SEGMENTATION", Set.of("featureColumns", "clusters", "maxIterations"),
             "DEMAND_FORECAST", Set.of("trainThroughDate"),
-            "STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainFraction"),
+            "STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainFraction", "trainThroughDate"),
             "INVENTORY_ANOMALY", Set.of("zThreshold"),
             "MARKET_BASKET", Set.of("minSupport", "minConfidence"),
-            "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "trainFraction", "reviewThreshold"));
+            "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "trainFraction", "reviewThreshold", "trainThroughDate"),
+            "DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate"));
 
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
