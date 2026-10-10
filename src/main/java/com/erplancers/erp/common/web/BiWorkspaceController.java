@@ -509,6 +509,51 @@ public class BiWorkspaceController {
         return output;
     }
 
+
+    @PostMapping("/measures/evaluate-series")
+    public List<Map<String, Object>> evaluateMeasureSeries(Authentication auth, @RequestBody EvaluateSeriesRequest request) {
+        requireTenant(auth, request.tenantId());
+        requireResource(auth, safeResource(request.resourceSlug()), "READ");
+        if (request.rows() == null || request.rows().size() > 1000
+                || request.expressions() == null || request.expressions().size() > 50) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide at most 1000 rows and 50 calculated measures");
+        }
+        List<Map<String, Object>> originalRows = request.rows();
+        List<Map<String, ?>> safeRows = new ArrayList<>();
+        for (Map<String, Object> row : originalRows) {
+            Map<String, Object> safe = new LinkedHashMap<>();
+            row.forEach((key, value) -> {
+                String alias = key.replaceAll("[^A-Za-z0-9_]", "_");
+                if (!alias.isEmpty() && Character.isDigit(alias.charAt(0))) alias = "_" + alias;
+                if (value instanceof Number) safe.put(alias, value);
+            });
+            safeRows.add(safe);
+        }
+        List<Map<String, Object>> enriched = new ArrayList<>();
+        for (Map<String, Object> row : originalRows) enriched.add(new LinkedHashMap<>(row));
+        for (Map.Entry<String, String> entry : request.expressions().entrySet()) {
+            if (!SAFE_KEY.matcher(entry.getKey()).matches()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid calculated measure key");
+            }
+            String expression = entry.getValue();
+            try {
+                if (expression != null && expression.matches("runningTotal\\([A-Za-z_][A-Za-z0-9_]{0,63}\\)")) {
+                    String field = expression.substring("runningTotal(".length(), expression.length() - 1);
+                    List<Double> totals = CalculatedMeasureExpression.evaluateRunningTotal(field, safeRows);
+                    for (int i = 0; i < enriched.size(); i++) enriched.get(i).put(entry.getKey(), totals.get(i));
+                } else {
+                    CalculatedMeasureExpression.validate(expression);
+                    for (int i = 0; i < safeRows.size(); i++) {
+                        enriched.get(i).put(entry.getKey(), CalculatedMeasureExpression.evaluate(expression, safeRows.get(i)));
+                    }
+                }
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
+            }
+        }
+        return enriched;
+    }
+
     private String validateDefinition(String raw) {
         try {
             JsonNode node = mapper.readTree(requiredText(raw, "definitionJson", 20000));
@@ -529,16 +574,9 @@ public class BiWorkspaceController {
 
     private void validateExpressionSyntax(String expression) {
         try {
-            // All built-in functions and operators are exercised with bounded, numeric sample values.
-            CalculatedMeasureExpression.evaluate(expression, Map.of("revenue", 10d, "cost", 4d,
-                    "previous", 8d, "current", 10d, "value", 2d, "amount", 2d));
+            CalculatedMeasureExpression.validate(expression);
         } catch (IllegalArgumentException ex) {
-            // Unknown identifiers are allowed at definition time; malformed syntax and unsafe calls are not.
-            if (ex.getMessage() != null && (ex.getMessage().startsWith("Unsupported function")
-                    || ex.getMessage().contains("Unexpected token") || ex.getMessage().contains("Expected")
-                    || ex.getMessage().contains("Division by zero") || ex.getMessage().contains("too long"))) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
-            }
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage());
         }
     }
 
@@ -683,6 +721,8 @@ public class BiWorkspaceController {
                                      String displayName, String expression, String formatHint, String visibility) {}
     public record EvaluateMeasuresRequest(String tenantId, String resourceSlug,
                                           Map<String, String> expressions, Map<String, ?> values) {}
+    public record EvaluateSeriesRequest(String tenantId, String resourceSlug,
+                                        Map<String, String> expressions, List<Map<String, Object>> rows) {}
     public record ReportView(String id, String tenantId, String ownerUsername, String name, String resourceSlug,
                              String definitionJson, String visibility, int version, Instant createdAt, Instant updatedAt) {}
     public record MeasureView(String id, String tenantId, String ownerUsername, String resourceSlug,
