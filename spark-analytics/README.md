@@ -20,6 +20,7 @@ Spark does not execute inside ordinary ERP CRUD HTTP requests. The current imple
 | `STOCKOUT_RISK` | `inventory_daily` | Time-ordered labelled logistic regression and AUC/precision/recall |
 | `INVENTORY_ANOMALY` | `inventory_daily` | Rolling 28-observation demand anomalies using z-scores |
 | `MARKET_BASKET` | `order_lines` | FP-Growth frequent itemsets and association rules |
+| `PRODUCT_RECOMMENDATIONS` | `order_lines` | Spark MLlib implicit-feedback ALS recommendations for products within a transaction/basket context; model and ranked recommendation output |
 | `RECEIVABLES_RISK` | `receivables` | Time-split overdue-risk scoring, holdout metrics, and a human-review queue only |
 | `DATA_DRIFT` | Same dataset as the trained model | PSI per feature against a saved baseline; scheduled daily for eligible production models |
 | `MODEL_SCORING` | Same dataset as the trained model | Scores current rows with a specified, promoted pipeline version; writes tenant-scoped Parquet results |
@@ -185,7 +186,7 @@ Example receivables-risk review queue:
 }
 ```
 
-Example product affinity job uses `"datasetKey": "order_lines"`, `"jobType": "MARKET_BASKET"`, and parameters `{"minSupport":0.01,"minConfidence":0.25}`.
+Example product affinity job uses `"datasetKey": "order_lines"`, `"jobType": "MARKET_BASKET"`, and parameters `{"minSupport":0.01,"minConfidence":0.25}`. For ALS recommendations, submit `PRODUCT_RECOMMENDATIONS` with `{"topN":10,"rank":16,"maxIterations":15,"regularization":0.1}`. The output ranks product suggestions for a transaction/basket context; it is not customer-level personalization because the allowlisted source contains only transaction and product identifiers. The implementation requires at least 20 distinct basket-product interactions, 2 baskets, and 2 products.
 
 These payloads require actual grants, configured policy rules, and source aliases; they do not bypass authorization.
 
