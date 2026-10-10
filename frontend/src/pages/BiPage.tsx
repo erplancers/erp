@@ -60,9 +60,42 @@ export function BiPage() {
   const [result, setResult] = useState<BiResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tenantId, setTenantId] = useState("");
+  const [reportName, setReportName] = useState("");
+  const [reportVisibility, setReportVisibility] = useState<"PRIVATE" | "SHARED">("PRIVATE");
+  const [selectedReportId, setSelectedReportId] = useState("");
+  const [measureKey, setMeasureKey] = useState("gross_margin_pct");
+  const [measureName, setMeasureName] = useState("Gross margin %");
+  const [measureExpression, setMeasureExpression] = useState("margin(revenue, cost)");
+  const [measureFormat, setMeasureFormat] = useState<"NUMBER" | "PERCENT" | "CURRENCY" | "INTEGER">("PERCENT");
+  const [scheduleCron, setScheduleCron] = useState("0 0 8 * * MON");
+  const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
+  const [scheduleRecipients, setScheduleRecipients] = useState("");
+  const [scheduleFormat, setScheduleFormat] = useState<"CSV" | "XLSX" | "PDF">("PDF");
+  const [workspaceNotice, setWorkspaceNotice] = useState("");
 
   const catalog = useQuery({ queryKey: ["catalog"], queryFn: () => api.catalog(credentials!), enabled: !!credentials });
   const schema = catalog.data?.resources.find(resource => resource.slug === slug);
+  const savedReports = useQuery({
+    queryKey: ["bi-workspace-reports", tenantId, credentials?.username],
+    queryFn: () => api.biWorkspaceReports(tenantId, credentials!),
+    enabled: !!credentials && !!tenantId.trim()
+  });
+  const savedMeasures = useQuery({
+    queryKey: ["bi-calculated-measures", tenantId, slug, credentials?.username],
+    queryFn: () => api.biMeasures(tenantId, slug, credentials!),
+    enabled: !!credentials && !!tenantId.trim() && !!slug
+  });
+  const reportSchedules = useQuery({
+    queryKey: ["bi-report-schedules", selectedReportId, tenantId, credentials?.username],
+    queryFn: () => api.biReportSchedules(selectedReportId, tenantId, credentials!),
+    enabled: !!credentials && !!tenantId.trim() && !!selectedReportId
+  });
+  const monitoring = useQuery({
+    queryKey: ["bi-monitoring", tenantId, credentials?.username],
+    queryFn: () => api.biMonitoring(tenantId, credentials!),
+    enabled: !!credentials && !!tenantId.trim()
+  });
   const fields = useMemo(() => schema?.fields.filter(field => !["id", "version"].includes(field.name)) ?? [], [schema]);
   const dimensionOptions = useMemo(() => fields.map(field => ({ label: field.name, value: field.name })), [fields]);
   const measureOptions = useMemo(() => [
@@ -99,6 +132,75 @@ export function BiPage() {
       .then((data: BiResult) => setResult(data))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "BI query failed"))
       .finally(() => setLoading(false));
+  }
+
+
+  async function saveCurrentReport() {
+    if (!credentials || !tenantId.trim() || !reportName.trim() || !slug || !dimensions.length || !measures.length) return;
+    setError(null); setWorkspaceNotice("");
+    try {
+      const report = await api.saveBiReport({
+        tenantId: tenantId.trim(), name: reportName.trim(), resourceSlug: slug, visibility: reportVisibility,
+        definitionJson: JSON.stringify({
+          dimensions, measures, filters, orderBy: orderBy || "", limit: Math.min(1000, Math.max(1, limit)),
+          includeRank, includeShareOfTotal: includeShare, includeGrandTotal
+        })
+      }, credentials);
+      setSelectedReportId(report.id);
+      setWorkspaceNotice("Saved report " + report.name + " (v" + report.version + ").");
+      await savedReports.refetch();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save report"); }
+  }
+
+  async function saveCalculatedMeasure() {
+    if (!credentials || !tenantId.trim() || !slug || !measureKey.trim() || !measureName.trim() || !measureExpression.trim()) return;
+    setError(null); setWorkspaceNotice("");
+    try {
+      const measure = await api.createBiMeasure({
+        tenantId: tenantId.trim(), resourceSlug: slug, measureKey: measureKey.trim(),
+        displayName: measureName.trim(), expression: measureExpression.trim(), formatHint: measureFormat,
+        visibility: reportVisibility
+      }, credentials);
+      setWorkspaceNotice("Saved calculated measure " + measure.displayName + ".");
+      await savedMeasures.refetch();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to save measure"); }
+  }
+
+  async function runSavedReport() {
+    if (!credentials || !tenantId.trim() || !selectedReportId) return;
+    setError(null); setLoading(true);
+    try {
+      const saved = await api.runBiReport(selectedReportId, tenantId.trim(), credentials);
+      setResult(saved);
+      setWorkspaceNotice("Loaded saved report.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to run saved report"); }
+    finally { setLoading(false); }
+  }
+
+  async function exportSavedReport(format: "CSV" | "XLSX" | "PDF") {
+    if (!credentials || !tenantId.trim() || !selectedReportId) return;
+    setError(null);
+    try {
+      const blob = await api.exportBiReport(selectedReportId, tenantId.trim(), format, credentials);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = (reportName || slug || "erp-report") + "." + format.toLowerCase();
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to export report"); }
+  }
+
+  async function createSchedule() {
+    if (!credentials || !tenantId.trim() || !selectedReportId || !scheduleRecipients.trim()) return;
+    setError(null); setWorkspaceNotice("");
+    try {
+      await api.createBiReportSchedule(selectedReportId, tenantId.trim(), {
+        cronExpression: scheduleCron.trim(), timezone: scheduleTimezone.trim(),
+        recipients: scheduleRecipients.split(/[;,]/).map(value => value.trim()).filter(Boolean),
+        exportFormat: scheduleFormat
+      }, credentials);
+      await reportSchedules.refetch();
+      setWorkspaceNotice("Schedule saved. Due deliveries are queued for the background sender.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to schedule report"); }
   }
 
   if (catalog.isPending) return <ProgressSpinner />;
@@ -186,6 +288,82 @@ export function BiPage() {
           }} />
           <Button label="Export CSV" icon="pi pi-download" severity="success" outlined disabled={!rows.length}
             onClick={() => downloadCsv(rows, slug + "-bi-" + new Date().toISOString().slice(0, 10) + ".csv")} />
+        </div>
+      </Card>
+
+      <Card title="Saved reports, calculated measures and delivery" className="mb-3">
+        <div className="flex flex-column gap-3">
+          <label className="flex flex-column gap-2"><span>Analytics tenant ID (must be granted to your account)</span>
+            <InputText value={tenantId} onChange={event => setTenantId(event.target.value)} placeholder="Tenant ID" />
+          </label>
+          <div className="flex flex-wrap gap-2 align-items-end">
+            <label className="flex flex-column gap-2"><span>Report name</span>
+              <InputText value={reportName} onChange={event => setReportName(event.target.value)} placeholder="Monthly sales by product" />
+            </label>
+            <label className="flex flex-column gap-2"><span>Visibility</span>
+              <Dropdown value={reportVisibility} options={[{label:"Private",value:"PRIVATE"},{label:"Shared in tenant",value:"SHARED"}]}
+                onChange={event => setReportVisibility(event.value)} className="w-full" />
+            </label>
+            <Button label="Save current query" icon="pi pi-save" onClick={saveCurrentReport}
+              disabled={!tenantId.trim() || !reportName.trim() || !dimensions.length || !measures.length} />
+          </div>
+          <div className="flex flex-wrap gap-2 align-items-end">
+            <label className="flex flex-column gap-2"><span>Saved report</span>
+              <Dropdown value={selectedReportId} options={savedReports.data || []} optionLabel="name" optionValue="id"
+                onChange={event => { setSelectedReportId(event.value); setWorkspaceNotice(""); }}
+                placeholder={tenantId ? "Select saved report" : "Enter tenant first"} className="w-full" />
+            </label>
+            <Button label="Run saved" icon="pi pi-play" onClick={runSavedReport} disabled={!selectedReportId || loading} />
+            <Button label="CSV" icon="pi pi-download" outlined onClick={() => exportSavedReport("CSV")} disabled={!selectedReportId} />
+            <Button label="Excel" icon="pi pi-file-excel" outlined onClick={() => exportSavedReport("XLSX")} disabled={!selectedReportId} />
+            <Button label="PDF" icon="pi pi-file-pdf" outlined onClick={() => exportSavedReport("PDF")} disabled={!selectedReportId} />
+          </div>
+          <div className="border-top-1 surface-border pt-3">
+            <h3 className="text-lg mt-0">Calculated measure</h3>
+            <p className="text-500 text-sm">Safe expressions: arithmetic, ratio(a,b), margin(revenue,cost), periodChange(current,previous), periodChangePct(current,previous), abs, min and max. Running totals use ordered numeric series.</p>
+            <div className="flex flex-wrap gap-2 align-items-end">
+              <label className="flex flex-column gap-2"><span>Key</span><InputText value={measureKey} onChange={event => setMeasureKey(event.target.value)} /></label>
+              <label className="flex flex-column gap-2"><span>Name</span><InputText value={measureName} onChange={event => setMeasureName(event.target.value)} /></label>
+              <label className="flex flex-column gap-2"><span>Expression</span><InputText value={measureExpression} onChange={event => setMeasureExpression(event.target.value)} style={{minWidth:260}} /></label>
+              <label className="flex flex-column gap-2"><span>Format</span>
+                <Dropdown value={measureFormat} options={["NUMBER","PERCENT","CURRENCY","INTEGER"].map(value=>({label:value,value}))}
+                  onChange={event => setMeasureFormat(event.value)} />
+              </label>
+              <Button label="Save measure" icon="pi pi-calculator" onClick={saveCalculatedMeasure} disabled={!tenantId.trim()} />
+            </div>
+            {savedMeasures.data && savedMeasures.data.length > 0 && <div className="flex flex-wrap gap-2 mt-3">
+              {savedMeasures.data.map(measure => <Tag key={measure.id} value={measure.displayName + " = " + measure.expression} />)}
+            </div>}
+          </div>
+          <div className="border-top-1 surface-border pt-3">
+            <h3 className="text-lg mt-0">Scheduled delivery</h3>
+            <div className="flex flex-wrap gap-2 align-items-end">
+              <label className="flex flex-column gap-2"><span>Cron (6 fields)</span><InputText value={scheduleCron} onChange={event => setScheduleCron(event.target.value)} /></label>
+              <label className="flex flex-column gap-2"><span>Timezone</span><InputText value={scheduleTimezone} onChange={event => setScheduleTimezone(event.target.value)} /></label>
+              <label className="flex flex-column gap-2"><span>Recipients (; separated)</span><InputText value={scheduleRecipients} onChange={event => setScheduleRecipients(event.target.value)} style={{minWidth:260}} /></label>
+              <label className="flex flex-column gap-2"><span>Format</span>
+                <Dropdown value={scheduleFormat} options={["CSV","XLSX","PDF"].map(value=>({label:value,value}))}
+                  onChange={event => setScheduleFormat(event.value)} />
+              </label>
+              <Button label="Create subscription" icon="pi pi-calendar-plus" onClick={createSchedule} disabled={!selectedReportId || !scheduleRecipients.trim()} />
+            </div>
+            {reportSchedules.data && reportSchedules.data.length > 0 && <DataTable value={reportSchedules.data} size="small" className="mt-3">
+              <Column field="cronExpression" header="Cron" />
+              <Column field="timezone" header="Timezone" />
+              <Column field="exportFormat" header="Format" />
+              <Column field="enabled" header="Enabled" />
+              <Column field="nextRunAt" header="Next run" />
+            </DataTable>}
+          </div>
+          {monitoring.data && <div className="border-top-1 surface-border pt-3">
+            <h3 className="text-lg mt-0">Analytics monitoring</h3>
+            <pre style={{whiteSpace:"pre-wrap",overflowX:"auto",maxHeight:260}}>{JSON.stringify(monitoring.data,null,2)}</pre>
+            <Button label="Refresh monitoring" icon="pi pi-refresh" outlined onClick={() => monitoring.refetch()} />
+          </div>}
+          {workspaceNotice && <Message severity="success" text={workspaceNotice} />}
+          {savedReports.isError && <Message severity="warn" text={savedReports.error.message} />}
+          {savedMeasures.isError && <Message severity="warn" text={savedMeasures.error.message} />}
+          {reportSchedules.isError && <Message severity="warn" text={reportSchedules.error.message} />}
         </div>
       </Card>
       {error && <Message severity="error" text={error} className="mb-3" />}
