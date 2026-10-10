@@ -64,7 +64,7 @@ public final class ReceivablesRiskModel {
     public static Result trainTimeOrdered(
             Dataset<Row> historicalInvoices, List<String> numericFeatures, String overdueLabel,
             String decisionDateColumn, List<String> identifierColumns, String trainThroughDate,
-            double reviewThreshold, String versionedModelPath) {
+            double reviewThreshold, String versionedModelPath) throws java.io.IOException {
         if (numericFeatures == null || numericFeatures.isEmpty()) throw new IllegalArgumentException("numericFeatures is required");
         if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
         if (!(reviewThreshold >= 0.0 && reviewThreshold <= 1.0)) throw new IllegalArgumentException("reviewThreshold must be in [0,1]");
