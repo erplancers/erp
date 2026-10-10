@@ -2,14 +2,12 @@ package com.erplancers.erp.analytics;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /** Cache housekeeping and low-cardinality operational metrics for BI/ML capacity monitoring. */
 @Component
-@RequiredArgsConstructor
 public class AnalyticsLifecycleMaintenance {
     private final JdbcTemplate jdbc;
 
