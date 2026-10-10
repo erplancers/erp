@@ -79,3 +79,119 @@ export interface AnalyticsJobSubmitRequest {
   parameters: Record<string, unknown>;
   idempotencyKey?: string;
 }
+
+export interface SavedBiReport {
+  id: string;
+  tenantId: string;
+  ownerUsername: string;
+  name: string;
+  resourceSlug: string;
+  definitionJson: string;
+  visibility: "PRIVATE" | "SHARED";
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface SaveBiReportRequest {
+  tenantId: string;
+  name: string;
+  resourceSlug: string;
+  definitionJson: string;
+  visibility: "PRIVATE" | "SHARED";
+}
+export interface CalculatedMeasure {
+  id: string;
+  tenantId: string;
+  ownerUsername: string;
+  resourceSlug: string;
+  measureKey: string;
+  displayName: string;
+  expression: string;
+  formatHint: "NUMBER" | "PERCENT" | "CURRENCY" | "INTEGER";
+  visibility: "PRIVATE" | "SHARED";
+  createdAt: string;
+  updatedAt: string;
+}
+export interface SaveCalculatedMeasureRequest {
+  tenantId: string;
+  resourceSlug: string;
+  measureKey: string;
+  displayName: string;
+  expression: string;
+  formatHint: "NUMBER" | "PERCENT" | "CURRENCY" | "INTEGER";
+  visibility: "PRIVATE" | "SHARED";
+}
+export interface CreateBiReportScheduleRequest {
+  cronExpression: string;
+  timezone: string;
+  recipients: string[];
+  exportFormat: "CSV" | "XLSX" | "PDF";
+}
+export interface BiReportSchedule {
+  id: string;
+  reportId: string;
+  tenantId: string;
+  createdBy: string;
+  cronExpression: string;
+  timezone: string;
+  recipientsJson: string;
+  exportFormat: string;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface BiReportDelivery {
+  id: string;
+  scheduleId: string;
+  reportId: string;
+  tenantId: string;
+  requestedBy: string;
+  status: string;
+  attempts: number;
+  availableAt: string;
+  completedAt?: string | null;
+  errorMessage?: string | null;
+  createdAt: string;
+}
+
+export interface CreateAnalyticsScheduleRequest {
+  tenantId: string;
+  modelName: string;
+  scheduleType: "RETRAIN" | "BATCH_SCORE";
+  jobType: string;
+  cronExpression: string;
+  timezone: string;
+  datasetKey: string;
+  parameters: Record<string, unknown>;
+}
+export interface AnalyticsModelSchedule {
+  id: string;
+  tenantId: string;
+  modelName: string;
+  createdBy: string;
+  scheduleType: string;
+  jobType: string;
+  cronExpression: string;
+  timezone: string;
+  datasetKey: string;
+  parametersJson: string;
+  enabled: boolean;
+  nextRunAt: string;
+  lastRunAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AnalyticsModelEvaluation {
+  id: string;
+  tenantId: string;
+  modelName: string;
+  modelVersion: number;
+  evaluationType: string;
+  metricsJson: string;
+  sampleSize: number;
+  datasetSnapshot?: string | null;
+  evaluatedBy: string;
+  createdAt: string;
+}

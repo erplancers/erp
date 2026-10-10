@@ -144,6 +144,12 @@ function SparkMlOperations() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedModelName, setSelectedModelName] = useState("");
+  const [scheduleType, setScheduleType] = useState<"RETRAIN" | "BATCH_SCORE">("RETRAIN");
+  const [scheduleJobType, setScheduleJobType] = useState("CUSTOMER_SEGMENTATION");
+  const [scheduleModelName, setScheduleModelName] = useState("customer_segmentation");
+  const [scheduleCron, setScheduleCron] = useState("0 0 2 * * SUN");
+  const [scheduleTimezone, setScheduleTimezone] = useState("UTC");
+  const [scheduleParametersText, setScheduleParametersText] = useState(() => initialParameters("CUSTOMER_SEGMENTATION"));
 
   const jobs = useQuery({
     queryKey: ["spark-analytics-jobs", tenantId, credentials?.username],
@@ -158,6 +164,11 @@ function SparkMlOperations() {
   const experiments = useQuery({
     queryKey: ["spark-analytics-experiments", tenantId, credentials?.username],
     queryFn: () => api.analyticsExperiments(tenantId.trim(), credentials!),
+    enabled: Boolean(credentials && tenantId.trim())
+  });
+  const schedules = useQuery({
+    queryKey: ["analytics-model-schedules", tenantId, credentials?.username],
+    queryFn: () => api.analyticsSchedules(tenantId.trim(), credentials!),
     enabled: Boolean(credentials && tenantId.trim())
   });
   const drift = useQuery({
@@ -207,7 +218,7 @@ function SparkMlOperations() {
   async function refreshAll() {
     setError("");
     await Promise.all([
-      jobs.refetch(), models.refetch(), experiments.refetch(), drift.refetch()
+      jobs.refetch(), models.refetch(), experiments.refetch(), drift.refetch(), schedules.refetch()
     ]);
   }
 
@@ -232,6 +243,48 @@ function SparkMlOperations() {
       parameters: parameters as Record<string, unknown>,
       idempotencyKey: idempotencyKey.trim() || undefined
     });
+  }
+
+
+  function changeScheduleType(next: "RETRAIN" | "BATCH_SCORE") {
+    setScheduleType(next);
+    const nextJob = next === "BATCH_SCORE" ? "MODEL_SCORING" : (
+      datasetKey === "inventory_daily" ? "DEMAND_FORECAST" :
+      datasetKey === "order_lines" ? "PRODUCT_RECOMMENDATIONS" :
+      datasetKey === "receivables" ? "RECEIVABLES_RISK" : "CUSTOMER_SEGMENTATION"
+    );
+    setScheduleJobType(nextJob);
+    setScheduleModelName(next === "BATCH_SCORE" ? "customer_segmentation" : nextJob.toLowerCase());
+    setScheduleParametersText(initialParameters(nextJob, datasetKey));
+  }
+
+  function scheduleJobOptions() {
+    if (scheduleType === "BATCH_SCORE") return [{ label: "MODEL_SCORING", value: "MODEL_SCORING" }];
+    const eligible: Record<string, string[]> = {
+      sales_orders: ["CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK"],
+      inventory_daily: ["DEMAND_FORECAST", "STOCKOUT_RISK"],
+      order_lines: ["PRODUCT_RECOMMENDATIONS"],
+      receivables: ["RECEIVABLES_RISK"]
+    };
+    return (eligible[datasetKey] || []).map(value => ({ label: value, value }));
+  }
+
+  function createModelSchedule() {
+    if (!credentials || !tenantId.trim()) { setError("Enter the tenant ID first."); return; }
+    let parameters: unknown;
+    try { parameters = JSON.parse(scheduleParametersText); } catch { setError("Schedule parameters must be valid JSON."); return; }
+    if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
+      setError("Schedule parameters must be a JSON object."); return;
+    }
+    setError(""); setNotice("");
+    api.createAnalyticsSchedule({
+      tenantId: tenantId.trim(), modelName: scheduleModelName.trim(), scheduleType, jobType: scheduleJobType,
+      cronExpression: scheduleCron.trim(), timezone: scheduleTimezone.trim(), datasetKey,
+      parameters: parameters as Record<string, unknown>
+    }, credentials).then(async saved => {
+      setNotice("Scheduled " + saved.scheduleType + " job " + saved.jobType + " (" + saved.id + ").");
+      await schedules.refetch();
+    }).catch(e => { setNotice(""); setError(errorText(e)); });
   }
 
   async function modelAction(action: "approve" | "reject" | "promote" | "rollback", model: AnalyticsModelView) {
@@ -325,6 +378,61 @@ function SparkMlOperations() {
             } />
           </DataTable>
         )}
+      </Card>
+
+
+      <Card title="Scheduled retraining and batch scoring" subTitle="Schedules enqueue durable Spark jobs; worker leases, retry limits, and live tenant/scope grants apply at execution time.">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: ".75rem", alignItems: "end" }}>
+          <label className="flex flex-column gap-2"><span>Schedule type</span>
+            <Dropdown value={scheduleType} options={[{label:"Retrain model",value:"RETRAIN"},{label:"Batch score",value:"BATCH_SCORE"}]}
+              onChange={e => changeScheduleType(e.value)} />
+          </label>
+          <label className="flex flex-column gap-2"><span>Dataset</span>
+            <Dropdown value={datasetKey} options={DATASETS} onChange={e => {
+              const next = e.value;
+              setDatasetKey(next);
+              const nextJob = scheduleType === "BATCH_SCORE" ? "MODEL_SCORING" :
+                next === "inventory_daily" ? "DEMAND_FORECAST" : next === "order_lines" ? "PRODUCT_RECOMMENDATIONS" :
+                next === "receivables" ? "RECEIVABLES_RISK" : "CUSTOMER_SEGMENTATION";
+              setScheduleJobType(nextJob); setScheduleParametersText(initialParameters(nextJob, next));
+            }} />
+          </label>
+          <label className="flex flex-column gap-2"><span>Job type</span>
+            <Dropdown value={scheduleJobType} options={scheduleJobOptions()} onChange={e => {
+              setScheduleJobType(e.value); setScheduleModelName(e.value.toLowerCase());
+              setScheduleParametersText(initialParameters(e.value, datasetKey));
+            }} />
+          </label>
+          <label className="flex flex-column gap-2"><span>Model name</span>
+            <InputText value={scheduleModelName} onChange={e => setScheduleModelName(e.target.value)} />
+          </label>
+          <label className="flex flex-column gap-2"><span>Cron (6 fields)</span>
+            <InputText value={scheduleCron} onChange={e => setScheduleCron(e.target.value)} />
+          </label>
+          <label className="flex flex-column gap-2"><span>Timezone</span>
+            <InputText value={scheduleTimezone} onChange={e => setScheduleTimezone(e.target.value)} />
+          </label>
+        </div>
+        <label className="flex flex-column gap-2 mt-3"><span>Parameters JSON</span>
+          <InputTextarea value={scheduleParametersText} onChange={e => setScheduleParametersText(e.target.value)} rows={5} autoResize />
+        </label>
+        <div className="flex gap-2 mt-3">
+          <Button label="Create schedule" icon="pi pi-calendar-plus" onClick={createModelSchedule} disabled={!tenantId.trim() || !scheduleModelName.trim()} />
+          <Button label="Refresh schedules" icon="pi pi-refresh" outlined onClick={() => schedules.refetch()} />
+        </div>
+        {schedules.isError && <Message severity="error" text={errorText(schedules.error)} />}
+        <DataTable value={schedules.data || []} dataKey="id" paginator rows={5} size="small" className="mt-3" emptyMessage="No scheduled model jobs.">
+          <Column field="scheduleType" header="Type" />
+          <Column field="modelName" header="Model" />
+          <Column field="jobType" header="Job" />
+          <Column field="cronExpression" header="Cron" />
+          <Column field="nextRunAt" header="Next run" body={(row: import("../types").AnalyticsModelSchedule) => new Date(row.nextRunAt).toLocaleString()} />
+          <Column field="enabled" header="Enabled" body={(row: import("../types").AnalyticsModelSchedule) =>
+            <Button size="small" outlined severity={row.enabled ? "success" : "secondary"} label={row.enabled ? "Pause" : "Enable"}
+              onClick={() => api.toggleAnalyticsSchedule(row.id, tenantId.trim(), !row.enabled, credentials!)
+                .then(() => schedules.refetch()).catch(e => setError(errorText(e)))} />
+          } />
+        </DataTable>
       </Card>
 
       <Card title="Model registry" subTitle="Candidate → validated → production; promotion and rollback require separate ERP policy permissions.">

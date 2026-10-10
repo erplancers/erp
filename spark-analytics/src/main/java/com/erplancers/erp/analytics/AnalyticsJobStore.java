@@ -211,6 +211,26 @@ public final class AnalyticsJobStore {
                     ps.setString(6, manifestJson); ps.setString(7, metricsJson);
                     ps.setString(8, job.requestedBy()); ps.executeUpdate();
                 }
+                long sampleSize = metricCount(metricsJson, "trainingRows") + metricCount(metricsJson, "holdoutRows");
+                if (sampleSize == 0) sampleSize = metricCount(metricsJson, "rows");
+                if (sampleSize == 0) sampleSize = metricCount(metricsJson, "customers");
+                try (PreparedStatement evaluation = c.prepareStatement("""
+                        INSERT INTO analytics_model_evaluation
+                          (id, tenant_id, model_name, model_version, evaluation_type, metrics_json,
+                           sample_size, dataset_snapshot, evaluated_by)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """)) {
+                    evaluation.setString(1, UUID.randomUUID().toString());
+                    evaluation.setString(2, job.tenantId());
+                    evaluation.setString(3, modelName);
+                    evaluation.setInt(4, version);
+                    evaluation.setString(5, metricCount(metricsJson, "holdoutRows") > 0 ? "HOLDOUT" : "TRAINING");
+                    evaluation.setString(6, metricsJson);
+                    evaluation.setLong(7, sampleSize);
+                    evaluation.setString(8, job.datasetKey() + ":" + job.createdAt());
+                    evaluation.setString(9, job.requestedBy());
+                    evaluation.executeUpdate();
+                }
                 c.commit();
                 return new ModelVersion(id, job.tenantId(), modelName, version, "CANDIDATE", artifactUri, manifestJson, metricsJson);
             } catch (SQLException | RuntimeException e) {
@@ -220,6 +240,16 @@ public final class AnalyticsJobStore {
                 c.setAutoCommit(true);
             }
         }
+    }
+
+    private long metricCount(String json, String key) {
+        if (json == null || key == null) return 0L;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("\"" + java.util.regex.Pattern.quote(key) + "\"\\s*:\\s*(\\d+)")
+                .matcher(json);
+        if (!matcher.find()) return 0L;
+        try { return Long.parseLong(matcher.group(1)); }
+        catch (NumberFormatException ignored) { return 0L; }
     }
 
     /** An approved reviewer must validate a candidate before promotion. */
