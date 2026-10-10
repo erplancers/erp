@@ -54,7 +54,7 @@ public final class CustomerSegmentationJob {
             }
         }
 
-        Dataset<Row> clean = input.select(requiredColumns)
+        Dataset<Row> clean = input.select(requiredColumns[0], java.util.Arrays.copyOfRange(requiredColumns, 1, requiredColumns.length))
                 .na().drop("any", requiredColumns);
         long rows = clean.count();
         if (rows < clusters) {
