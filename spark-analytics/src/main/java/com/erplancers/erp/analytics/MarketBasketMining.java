@@ -14,7 +14,7 @@ public final class MarketBasketMining {
 
     public static Result mine(
             Dataset<Row> transactionItems, String transactionId, String productId,
-            double minSupport, double minConfidence, String modelPath) {
+            double minSupport, double minConfidence, String modelPath) throws java.io.IOException {
         SalesIntelligence.requireColumns(transactionItems, transactionId, productId);
         if (!(minSupport > 0.0 && minSupport <= 1.0)) throw new IllegalArgumentException("minSupport must be in (0,1]");
         if (!(minConfidence > 0.0 && minConfidence <= 1.0)) throw new IllegalArgumentException("minConfidence must be in (0,1]");
