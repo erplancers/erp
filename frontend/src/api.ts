@@ -68,6 +68,11 @@ export const api={
  biReportSchedules:(id:string,tenantId:string,c:Credentials)=>apiFetch<import("./types").BiReportSchedule[]>(`/bi-workspace/reports/${encodeURIComponent(id)}/schedules?tenantId=${encodeURIComponent(tenantId)}`,c),
  biReportDeliveries:(tenantId:string,c:Credentials)=>apiFetch<import("./types").BiReportDelivery[]>(`/bi-workspace/deliveries?tenantId=${encodeURIComponent(tenantId)}`,c),
  biMonitoring:(tenantId:string,c:Credentials)=>apiFetch<Record<string,unknown>>(`/bi-workspace/monitoring?tenantId=${encodeURIComponent(tenantId)}`,c),
+
+ createAnalyticsSchedule:(body:import("./types").CreateAnalyticsScheduleRequest,c:Credentials)=>apiFetch<import("./types").AnalyticsModelSchedule>("/analytics/schedules",c,{method:"POST",body:JSON.stringify(body)}),
+ analyticsSchedules:(tenantId:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelSchedule[]>(`/analytics/schedules?tenantId=${encodeURIComponent(tenantId)}`,c),
+ toggleAnalyticsSchedule:(id:string,tenantId:string,enabled:boolean,c:Credentials)=>apiFetch<import("./types").AnalyticsModelSchedule>(`/analytics/schedules/${encodeURIComponent(id)}?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"PATCH",body:JSON.stringify({enabled})}),
+ analyticsEvaluations:(tenantId:string,name:string,version:number,c:Credentials)=>apiFetch<import("./types").AnalyticsModelEvaluation[]>(`/analytics/models/${encodeURIComponent(name)}/${version}/evaluations?tenantId=${encodeURIComponent(tenantId)}`,c),
  analyticsModels:(tenantId:string,c:Credentials,modelName?:string)=>apiFetch<import("./types").AnalyticsModelView[]>(`/analytics/models?tenantId=${encodeURIComponent(tenantId)}${modelName?`&modelName=${encodeURIComponent(modelName)}`:""}`,c),
  analyticsExperiments:(tenantId:string,c:Credentials)=>apiFetch<import("./types").AnalyticsExperimentView[]>(`/analytics/experiments?tenantId=${encodeURIComponent(tenantId)}`,c),
  analyticsDrift:(tenantId:string,c:Credentials,modelName?:string)=>apiFetch<import("./types").AnalyticsDriftView[]>(`/analytics/drift?tenantId=${encodeURIComponent(tenantId)}${modelName?`&modelName=${encodeURIComponent(modelName)}`:""}`,c),
