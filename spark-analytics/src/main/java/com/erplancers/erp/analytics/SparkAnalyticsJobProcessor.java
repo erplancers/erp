@@ -197,6 +197,33 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("modelPath", modelPath);
                 algorithm = "overdue-payment-logistic-regression-human-review";
             }
+            case "CUSTOMER_CHURN_RISK" -> {
+                List<String> features = stringList(p, "featureColumns", List.of("net_amount"));
+                String label = stringParameter(p, "labelColumn", "churn_label");
+                requireAliases(source, features);
+                requireAliases(source, List.of(label, "customer_id", "order_date"));
+                String selectedAlgorithm = stringParameter(p, "algorithm", "LOGISTIC_REGRESSION");
+                double threshold = doubleParameter(p, "reviewThreshold", 0.65, 0.0, 1.0);
+                modelPath = output + "/model";
+                CustomerChurnMining.Result result = CustomerChurnMining.trainTimeOrdered(source, features, label,
+                        "order_date", List.of("customer_id", "order_id"), requiredString(p, "trainThroughDate"),
+                        selectedAlgorithm, threshold, modelPath);
+                outputPath = write(result.predictions(), output + "/churn-risk-review-queue");
+                metrics.put("areaUnderRoc", result.areaUnderRoc());
+                metrics.put("weightedPrecision", result.weightedPrecision());
+                metrics.put("weightedRecall", result.weightedRecall());
+                metrics.put("trainingRows", result.trainingRows());
+                metrics.put("holdoutRows", result.holdoutRows());
+                metrics.put("algorithm", result.algorithm());
+                metrics.put("reviewThreshold", threshold);
+                metrics.put("decisionPolicy", "RETENTION_REVIEW_ONLY");
+                metrics.put("outputPath", outputPath);
+                baselinePath = output + "/monitoring-baseline";
+                write(result.baselineFeatures(), baselinePath);
+                modelFeatureColumns = features;
+                metrics.put("modelPath", modelPath);
+                algorithm = "customer-churn-risk-" + result.algorithm().toLowerCase(Locale.ROOT);
+            }
             case "MODEL_SCORING" -> {
                 String modelName = requiredString(p, "modelName");
                 int version = intParameter(p, "modelVersion", 1, 1, Integer.MAX_VALUE);
@@ -282,6 +309,22 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                                 .drop("features", "rawPrediction", "probability", "prediction");
                         algorithm = "receivables-risk-batch-scoring-human-review";
                     }
+                    case "customer_churn_risk" -> {
+                        requireAliases(source, features);
+                        java.util.LinkedHashSet<String> selected = new java.util.LinkedHashSet<>(
+                                List.of("customer_id", "order_id", "order_date"));
+                        selected.addAll(features);
+                        Dataset<Row> rawInput = source.select(selected.iterator().next(),
+                                selected.stream().skip(1).toArray(String[]::new));
+                        Dataset<Row> raw = scoringModel.transform(rawInput);
+                        scoringInput = raw.withColumn("churn_risk_score",
+                                        org.apache.spark.ml.functions.vector_to_array(
+                                                org.apache.spark.sql.functions.col("probability"), "float64").getItem(1))
+                                .withColumn("human_review_required", org.apache.spark.sql.functions.col("churn_risk_score").geq(reviewThreshold))
+                                .withColumn("recommended_action", org.apache.spark.sql.functions.lit("RETENTION_REVIEW_ONLY"))
+                                .drop("features", "rawPrediction", "probability", "prediction");
+                        algorithm = "customer-churn-risk-batch-scoring-human-review";
+                    }
                     default -> throw new IllegalArgumentException("Model is not eligible for pipeline scoring: " + modelName);
                 }
                 outputPath = write(scoringInput, output + "/model-scoring");
@@ -337,6 +380,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                     case "demand_forecast" -> current = InventoryMining.demandFeatureFrame(source,
                             "product_id", "warehouse_id", "demand_date", "demand_qty");
                     case "stockout_risk", "receivables_risk" -> current = source;
+                    case "customer_churn_risk" -> current = source;
                     default -> throw new IllegalArgumentException("Drift monitoring is not configured for model: " + modelName);
                 }
                 double alertThreshold = doubleParameter(p, "alertThreshold", 0.25, 0.01, 10.0);
@@ -358,7 +402,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         }
 
         context.checkCancellation();
-        if (Set.of("CUSTOMER_SEGMENTATION", "DEMAND_FORECAST", "STOCKOUT_RISK", "RECEIVABLES_RISK").contains(job.jobType())) {
+        if (Set.of("CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DEMAND_FORECAST", "STOCKOUT_RISK", "RECEIVABLES_RISK").contains(job.jobType())) {
             candidateArtifactUri = modelPath;
         }
         @SuppressWarnings("unchecked")
