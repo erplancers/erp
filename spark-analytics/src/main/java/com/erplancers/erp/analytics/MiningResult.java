@@ -9,8 +9,10 @@ public record MiningResult(
         long inputRows,
         int outputGroups,
         List<Map<String, Object>> summaries,
-        String modelPath) {
+        String modelPath,
+        Map<String, Object> metrics) {
     public MiningResult {
         summaries = summaries == null ? List.of() : List.copyOf(summaries);
+        metrics = metrics == null ? Map.of() : Map.copyOf(metrics);
     }
 }
