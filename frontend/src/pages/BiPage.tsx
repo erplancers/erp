@@ -63,8 +63,8 @@ export function BiPage() {
   const [calcExpression, setCalcExpression] = useState("");
   const [runningTotalMeasure, setRunningTotalMeasure] = useState("");
   const [comparisonName, setComparisonName] = useState("sales");
-  const [currentPeriodMeasure, setCurrentPeriodMeasure] = useState("sum_amount");
-  const [previousPeriodMeasure, setPreviousPeriodMeasure] = useState("previous_sum_amount");
+  const [currentPeriodMeasure, setCurrentPeriodMeasure] = useState("");
+  const [previousPeriodMeasure, setPreviousPeriodMeasure] = useState("PREVIOUS_PERIOD");
   const [result, setResult] = useState<BiResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -205,7 +205,7 @@ export function BiPage() {
             <label className="flex flex-column gap-1" style={{minWidth:"260px",flex:"1"}}><span className="text-sm">Expression</span><InputText value={calcExpression} onChange={e=>setCalcExpression(e.target.value)} placeholder="sum_amount - sum_cost" /></label>
             <Button label="Add measure" icon="pi pi-plus" onClick={addCalculatedMeasure} />
           </div>
-          <p className="text-500 text-sm">Use numeric result aliases such as sum_amount. Supports +, -, *, / and parentheses; no SQL or scripting.</p>
+          <p className="text-500 text-sm">Use numeric result aliases such as sum_amount. Supports +, -, *, / and parentheses; no SQL or scripting. Set previous-period measure to PREVIOUS_PERIOD to compare each row with the prior row; sort by a date dimension ascending.</p>
           {calculatedMeasures.length > 0 && <div className="flex flex-wrap gap-2 mb-2">{calculatedMeasures.map(item =>
             <Tag key={item.name} value={item.name+" = "+item.expression} icon="pi pi-calculator" removable onRemove={()=>setCalculatedMeasures(previous=>previous.filter(m=>m.name!==item.name))} />
           )}</div>}
@@ -215,7 +215,7 @@ export function BiPage() {
             </label>
             <label className="flex flex-column gap-1"><span className="text-sm">Comparison name</span><InputText value={comparisonName} onChange={e=>setComparisonName(e.target.value)} /></label>
             <label className="flex flex-column gap-1"><span className="text-sm">Current measure alias</span><InputText value={currentPeriodMeasure} onChange={e=>setCurrentPeriodMeasure(e.target.value)} /></label>
-            <label className="flex flex-column gap-1"><span className="text-sm">Previous-period measure alias</span><InputText value={previousPeriodMeasure} onChange={e=>setPreviousPeriodMeasure(e.target.value)} /></label>
+            <label className="flex flex-column gap-1"><span className="text-sm">Previous-period measure</span><InputText value={previousPeriodMeasure} onChange={e=>setPreviousPeriodMeasure(e.target.value)} /></label>
           </div>
         </Card>
         <BiReportTools resourceSlug={slug} query={{dimensions, measures, filters, orderBy:orderBy || "", limit:Math.min(5000,Math.max(1,limit)), includeRank, includeShareOfTotal:includeShare, includeGrandTotal}} calculatedMeasures={calculatedMeasures} />
