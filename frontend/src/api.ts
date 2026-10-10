@@ -62,4 +62,15 @@ export const api={
  reviewAnalyticsModel:(tenantId:string,name:string,version:number,approved:boolean,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/review?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({approved,note})}),
  promoteAnalyticsModel:(tenantId:string,name:string,version:number,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/promote?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({note})}),
  rollbackAnalyticsModel:(tenantId:string,name:string,version:number,note:string,c:Credentials)=>apiFetch<import("./types").AnalyticsModelView>(`/analytics/models/${encodeURIComponent(name)}/${version}/rollback?tenantId=${encodeURIComponent(tenantId)}`,c,{method:"POST",body:JSON.stringify({note})})
+
+ biCachedQuery:(slug:string,body:object,c:Credentials)=>apiFetch<{report:BiReport;cached:boolean;cachedAt:string}>(`/bi/resources/${encodeURIComponent(slug)}/query/cached`,c,{method:"POST",body:JSON.stringify(body)}),
+ savedBiReports:(c:Credentials)=>apiFetch<import("./types").SavedBiReport[]>("/bi/reports",c),
+ saveBiReport:(body:object,c:Credentials)=>apiFetch<import("./types").SavedBiReport>("/bi/reports",c,{method:"POST",body:JSON.stringify(body)}),
+ deleteBiReport:(id:string,c:Credentials)=>apiFetch<void>(`/bi/reports/${encodeURIComponent(id)}`,c,{method:"DELETE"}),
+ shareBiReport:(id:string,grants:Array<{username:string;permission:"READ"|"EDIT"}>,c:Credentials)=>apiFetch<void>(`/bi/reports/${encodeURIComponent(id)}/grants`,c,{method:"PUT",body:JSON.stringify({grants})}),
+ subscribeBiReport:(id:string,body:{recipientEmail:string;cronExpression:string;exportFormat:"CSV"|"XLSX"|"PDF"},c:Credentials)=>apiFetch<any>(`/bi/reports/${encodeURIComponent(id)}/subscriptions`,c,{method:"POST",body:JSON.stringify(body)}),
+ exportBiReport:async(id:string,format:"CSV"|"XLSX"|"PDF",c:Credentials):Promise<Blob>=>{const r=await fetch(API_BASE+`/bi/reports/${encodeURIComponent(id)}/export?format=${format}`,{headers:{Authorization:authHeader(c)}});if(!r.ok)throw new Error((await r.text())||`Export failed: ${r.status}`);return r.blob();},
+ retrainingPolicies:(tenantId:string,c:Credentials)=>apiFetch<import("./types").RetrainingPolicy[]>(`/analytics/retraining-policies?tenantId=${encodeURIComponent(tenantId)}`,c),
+ saveRetrainingPolicy:(body:object,c:Credentials)=>apiFetch<import("./types").RetrainingPolicy>("/analytics/retraining-policies",c,{method:"PUT",body:JSON.stringify(body)})
+
 };
