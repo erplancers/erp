@@ -13,6 +13,9 @@ dependencies {
     implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
     implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
     implementation 'org.postgresql:postgresql:42.7.7'
+    // Filesystem connectors used by protected HDFS/S3-compatible/Azure artifact stores.
+    implementation 'org.apache.hadoop:hadoop-aws:3.4.1'
+    implementation 'org.apache.hadoop:hadoop-azure:3.4.1'
     testImplementation platform('org.junit:junit-bom:5.12.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }
