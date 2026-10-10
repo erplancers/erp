@@ -34,6 +34,8 @@ import java.io.IOException;
 import java.util.stream.Collectors;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.*;
 import java.util.regex.Pattern;
@@ -167,7 +169,87 @@ public class BiWorkspaceController {
                                           @RequestParam String tenantId) {
         ReportView report = readableReport(id, tenantId, auth);
         requireResource(auth, report.resourceSlug(), "READ");
-        return bi.query(report.resourceSlug(), queryFromDefinition(report.definitionJson()));
+        long started = System.nanoTime();
+        String cacheKey = cacheKey(tenantId, auth.getName(), report.resourceSlug(), report.definitionJson());
+        List<String> cached = jdbc.query("""
+                SELECT payload_json FROM bi_query_cache
+                 WHERE cache_key = ? AND tenant_id = ? AND expires_at > CURRENT_TIMESTAMP
+                """, (rs, row) -> rs.getString("payload_json"), cacheKey, tenantId);
+        if (!cached.isEmpty()) {
+            try {
+                ErpBiEngine.BiReport result = mapper.readValue(cached.getFirst(), ErpBiEngine.BiReport.class);
+                recordOperation(tenantId, "saved_report_query", "SUCCEEDED", started, result.rowCount(), "cache-hit");
+                return result;
+            } catch (JsonProcessingException invalidCache) {
+                jdbc.update("DELETE FROM bi_query_cache WHERE cache_key = ?", cacheKey);
+            }
+        }
+        ErpBiEngine.BiReport result = bi.query(report.resourceSlug(), queryFromDefinition(report.definitionJson()));
+        try {
+            String payload = mapper.writeValueAsString(result);
+            jdbc.update("""
+                    INSERT INTO bi_query_cache(cache_key, tenant_id, resource_slug, payload_json, row_count, expires_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP + INTERVAL '2 minutes')
+                    ON CONFLICT (cache_key) DO UPDATE SET payload_json = EXCLUDED.payload_json,
+                      row_count = EXCLUDED.row_count, created_at = CURRENT_TIMESTAMP,
+                      expires_at = EXCLUDED.expires_at
+                    """, cacheKey, tenantId, report.resourceSlug(), payload, result.rowCount());
+        } catch (JsonProcessingException ignored) {
+            // A cache serialization failure must not fail the report itself.
+        }
+        recordOperation(tenantId, "saved_report_query", "SUCCEEDED", started, result.rowCount(), "cache-miss");
+        return result;
+    }
+
+    @GetMapping("/monitoring")
+    public Map<String, Object> monitoring(Authentication auth, @RequestParam String tenantId) {
+        requireTenant(auth, tenantId);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("generatedAt", Instant.now().toString());
+        summary.put("analyticsJobs", jdbc.queryForList("""
+                SELECT status, COUNT(*) AS count FROM analytics_job
+                 WHERE tenant_id = ? GROUP BY status ORDER BY status
+                """, tenantId));
+        summary.put("queuedReportDeliveries", jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bi_report_delivery WHERE tenant_id = ? AND status = 'QUEUED'
+                """, Long.class, tenantId));
+        summary.put("activeCacheEntries", jdbc.queryForObject("""
+                SELECT COUNT(*) FROM bi_query_cache WHERE tenant_id = ? AND expires_at > CURRENT_TIMESTAMP
+                """, Long.class, tenantId));
+        summary.put("refreshState", jdbc.queryForList("""
+                SELECT dataset_key, watermark_value, last_started_at, last_completed_at,
+                       rows_processed, status, error_message, updated_at
+                  FROM bi_refresh_state WHERE tenant_id = ? ORDER BY dataset_key
+                """, tenantId));
+        summary.put("recentOperations", jdbc.queryForList("""
+                SELECT component, operation, status, duration_ms, rows_processed, created_at
+                  FROM analytics_operation_metric WHERE tenant_id = ?
+                 ORDER BY created_at DESC LIMIT 50
+                """, tenantId));
+        summary.put("modelDriftAlerts", jdbc.queryForObject("""
+                SELECT COUNT(*) FROM analytics_drift_metric WHERE tenant_id = ? AND status IN ('ALERT','CRITICAL')
+                """, Long.class, tenantId));
+        return summary;
+    }
+
+    private String cacheKey(String tenantId, String username, String resource, String definition) {
+        try {
+            String input = tenantId + "\\n" + username + "\\n" + resource + "\\n" + definition;
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(input.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException impossible) {
+            throw new IllegalStateException("SHA-256 is unavailable", impossible);
+        }
+    }
+
+    private void recordOperation(String tenantId, String operation, String status, long started,
+                                 long rows, String detail) {
+        long durationMs = Math.max(0, (System.nanoTime() - started) / 1_000_000);
+        jdbc.update("""
+                INSERT INTO analytics_operation_metric
+                  (tenant_id, component, operation, status, duration_ms, rows_processed, detail_json)
+                VALUES (?, 'BI_API', ?, ?, ?, ?, ?)
+                """, tenantId, operation, status, durationMs, rows, "{\\"cache\\":\\"" + detail + "\\"}");
     }
 
 
