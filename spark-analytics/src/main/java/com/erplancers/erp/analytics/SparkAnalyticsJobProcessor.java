@@ -38,6 +38,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         Map<String, Object> p = json.readValue(job.parametersJson(), new TypeReference<>() {});
         AnalyticsDatasetCatalog.DatasetDefinition definition = catalog.require(job.datasetKey());
         context.checkCancellation();
+        String scopeFingerprint = reader.scopeFingerprint(definition, job);
         Dataset<Row> source = reader.read(definition, job);
         String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id();
         String inputEvidence = "source=" + definition.table() + "; filtered-at-execution=" + Instant.now();
@@ -196,6 +197,9 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 if (!job.datasetKey().equals(manifestNode.path("datasetKey").asText())) {
                     throw new SecurityException("Dataset key does not match model training dataset");
                 }
+                if (!scopeFingerprint.equals(manifestNode.path("scopeFingerprint").asText())) {
+                    throw new SecurityException("Current tenant/entity grants differ from the model baseline; retrain before drift comparison");
+                }
                 String baselineUri = manifestNode.path("baselineUri").asText("");
                 if (baselineUri.isBlank()) throw new IllegalArgumentException("This model version has no numeric drift baseline");
                 List<String> features = stringList(p, "featureColumns",
@@ -240,7 +244,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 Map.entry("createdAt", Instant.now().toString()), Map.entry("parameters", p),
                 Map.entry("metrics", metrics), Map.entry("inputEvidence", inputEvidence),
                 Map.entry("outputPath", outputPath), Map.entry("baselineUri", baselinePath == null ? "" : baselinePath),
-                Map.entry("featureColumns", modelFeatureColumns)));
+                Map.entry("featureColumns", modelFeatureColumns), Map.entry("scopeFingerprint", scopeFingerprint)));
         String resultJson = json.writeValueAsString(Map.of(
                 "jobId", job.id(), "algorithm", algorithm, "metrics", metrics,
                 "outputPath", outputPath, "modelPath", modelPath == null ? "" : modelPath,
