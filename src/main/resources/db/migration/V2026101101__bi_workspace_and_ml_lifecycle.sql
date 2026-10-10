@@ -139,6 +139,7 @@ CREATE TABLE IF NOT EXISTS analytics_model_schedule (
     model_name VARCHAR(160) NOT NULL,
     created_by VARCHAR(120) NOT NULL,
     schedule_type VARCHAR(24) NOT NULL,
+    job_type VARCHAR(80) NOT NULL,
     cron_expression VARCHAR(120) NOT NULL,
     dataset_key VARCHAR(100) NOT NULL,
     parameters_json TEXT NOT NULL,
