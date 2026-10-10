@@ -124,7 +124,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 requireAliases(source, List.of(label));
                 modelPath = output + "/model";
                 InventoryMining.StockoutResult result = InventoryMining.trainStockoutRiskTimeOrdered(source,
-                        features, label, "demand_date", requiredString(p, "trainThroughDate"), modelPath);
+                        features, label, "demand_date", List.of("product_id", "warehouse_id"),
+                        requiredString(p, "trainThroughDate"), modelPath);
                 outputPath = write(result.predictions(), output + "/stockout-risk");
                 metrics.put("areaUnderRoc", result.areaUnderRoc());
                 metrics.put("weightedPrecision", result.weightedPrecision());
@@ -170,8 +171,8 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 requireAliases(source, List.of(label));
                 double threshold = doubleParameter(p, "reviewThreshold", 0.65, 0.0, 1.0);
                 modelPath = output + "/model";
-                ReceivablesRiskModel.Result result = ReceivablesRiskModel.trainTimeOrdered(source, features, label,
-                        "due_date", requiredString(p, "trainThroughDate"), threshold, modelPath);
+                ReceivablesRiskModel.Result result = ReceivablesRiskModel.trainTimeOrdered(source, features, label, "due_date", List.of("invoice_id", "customer_id"),
+                        requiredString(p, "trainThroughDate"), threshold, modelPath);
                 outputPath = write(result.reviewQueue(), output + "/receivables-review-queue");
                 metrics.put("areaUnderRoc", result.areaUnderRoc());
                 metrics.put("trainingRows", result.trainingRows());
