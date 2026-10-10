@@ -112,7 +112,7 @@ public final class AnalyticsJobStore {
             // worker id isn't part of the Job to avoid leaking worker internals; status is safely queried by ID here.
             ps.setString(2, job.workerId());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() && "CANCEL_REQUESTED".equals(rs.getString(1));
+                return !rs.next() || "CANCEL_REQUESTED".equals(rs.getString(1));
             }
         }
     }
@@ -334,6 +334,20 @@ public final class AnalyticsJobStore {
             ps.setDouble(5, observation.psi()); ps.setLong(6, observation.currentRows());
             ps.setString(7, observation.baselineSnapshot()); ps.setString(8, observation.currentSnapshot());
             ps.setString(9, observation.status()); ps.executeUpdate();
+        }
+    }
+
+
+    public boolean renewLease(Job job, int leaseSeconds) throws SQLException {
+        try (Connection c = connect(); PreparedStatement ps = c.prepareStatement("""
+                UPDATE analytics_job SET lease_until = CURRENT_TIMESTAMP + (? * INTERVAL '1 second'),
+                       updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ? AND worker_id = ? AND status IN ('RUNNING','CANCEL_REQUESTED')
+                """)) {
+            ps.setInt(1, leaseSeconds);
+            ps.setString(2, job.id());
+            ps.setString(3, job.workerId());
+            return ps.executeUpdate() == 1;
         }
     }
 
