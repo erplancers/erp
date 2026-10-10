@@ -17,6 +17,29 @@ import java.util.Objects;
 public final class CalculatedMeasureExpression {
     private CalculatedMeasureExpression() {}
 
+    public static void validate(String expression) {
+        if (expression == null || expression.isBlank() || expression.length() > 1000) {
+            throw new IllegalArgumentException("Expression must contain 1 to 1000 characters");
+        }
+        if (expression.matches("runningTotal\\([A-Za-z_][A-Za-z0-9_]{0,63}\\)")) return;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("[A-Za-z_][A-Za-z0-9_]{0,63}").matcher(expression);
+        Map<String, Object> sample = new java.util.HashMap<>();
+        java.util.Set<String> functions = java.util.Set.of("ratio", "margin", "periodChange",
+                "periodChangePct", "abs", "min", "max");
+        while (matcher.find()) {
+            String name = matcher.group();
+            int after = matcher.end();
+            while (after < expression.length() && Character.isWhitespace(expression.charAt(after))) after++;
+            if (after < expression.length() && expression.charAt(after) == '(') {
+                if (!functions.contains(name)) throw new IllegalArgumentException("Unsupported function '" + name + "'");
+            } else {
+                sample.put(name, 1.0d);
+            }
+        }
+        evaluate(expression, sample);
+    }
+
     public static double evaluate(String expression, Map<String, ?> values) {
         if (expression == null || expression.isBlank() || expression.length() > 1000) {
             throw new IllegalArgumentException("Expression must contain 1 to 1000 characters");
