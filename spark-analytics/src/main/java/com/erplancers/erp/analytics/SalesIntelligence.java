@@ -78,6 +78,14 @@ public final class SalesIntelligence {
                 .withColumn("estimate_method", lit("annualized observed revenue; excludes retention/margin discounting"));
     }
 
+
+    static Dataset<Row> selectColumns(Dataset<Row> data, String... columns) {
+        if (columns == null || columns.length == 0) throw new IllegalArgumentException("At least one column is required");
+        return data.select(java.util.Arrays.stream(columns)
+                .map(org.apache.spark.sql.functions::col)
+                .toArray(org.apache.spark.sql.Column[]::new));
+    }
+
     static void requireColumns(Dataset<Row> data, String... columns) {
         if (data == null) throw new IllegalArgumentException("Dataset is required");
         java.util.Set<String> available = java.util.Set.of(data.columns());
