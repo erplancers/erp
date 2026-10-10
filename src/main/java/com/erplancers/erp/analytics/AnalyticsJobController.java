@@ -39,18 +39,18 @@ public class AnalyticsJobController {
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
-    private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.of(
-            "RFM", Set.of("asOfDate"),
-            "COHORT_ANALYSIS", Set.of(),
-            "CUSTOMER_LIFETIME_VALUE", Set.of(),
-            "CUSTOMER_SEGMENTATION", Set.of("featureColumns", "clusters", "maxIterations"),
-            "DEMAND_FORECAST", Set.of("trainThroughDate"),
-            "STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate"),
-            "INVENTORY_ANOMALY", Set.of("zThreshold"),
-            "MARKET_BASKET", Set.of("minSupport", "minConfidence"),
-            "RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate"),
-            "DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate"),
-            "MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold"));
+    private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.ofEntries(
+            Map.entry("RFM", Set.of("asOfDate")),
+            Map.entry("COHORT_ANALYSIS", Set.of()),
+            Map.entry("CUSTOMER_LIFETIME_VALUE", Set.of()),
+            Map.entry("CUSTOMER_SEGMENTATION", Set.of("featureColumns", "clusters", "maxIterations")),
+            Map.entry("DEMAND_FORECAST", Set.of("trainThroughDate")),
+            Map.entry("STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate")),
+            Map.entry("INVENTORY_ANOMALY", Set.of("zThreshold")),
+            Map.entry("MARKET_BASKET", Set.of("minSupport", "minConfidence")),
+            Map.entry("RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate")),
+            Map.entry("DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate")),
+            Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")));
 
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
