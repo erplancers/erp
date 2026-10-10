@@ -18,7 +18,7 @@ class BiCalculatedMeasureServiceTest {
                         new BiCalculatedMeasureService.CalculatedMeasure("margin_pct", "(revenue-cost)/revenue*100")),
                 List.of(), List.of());
         assertEquals(new BigDecimal("50"), rows.getFirst().get("margin"));
-        assertEquals(new BigDecimal("40"), rows.getFirst().get("margin_pct"));
+        assertEquals(0, ((BigDecimal) rows.getFirst().get("margin_pct")).compareTo(new BigDecimal("40")));
     }
 
     @Test
@@ -30,7 +30,7 @@ class BiCalculatedMeasureServiceTest {
         assertEquals(new BigDecimal("10"), rows.get(0).get("sales_running_total"));
         assertEquals(new BigDecimal("30"), rows.get(1).get("sales_running_total"));
         assertEquals(new BigDecimal("2"), rows.get(0).get("sales_change"));
-        assertEquals(new BigDecimal("25"), rows.get(0).get("sales_change_pct"));
+        assertEquals(0, ((BigDecimal) rows.get(0).get("sales_change_pct")).compareTo(new BigDecimal("25")));
     }
 
     @Test
