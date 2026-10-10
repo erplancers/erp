@@ -37,6 +37,7 @@ public class AnalyticsJobController {
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
                     "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY")),
+            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.of(
             "RFM", Set.of("asOfDate"),
