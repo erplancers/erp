@@ -122,8 +122,14 @@ public final class InventoryMining {
                 new org.apache.spark.ml.classification.LogisticRegression()
                         .setFeaturesCol("features").setLabelCol(labelColumn).setMaxIter(100).setRegParam(0.05);
         PipelineModel model = new Pipeline().setStages(new PipelineStage[]{assembler, classifier}).fit(train);
-        Dataset<Row> predictions = model.transform(holdout);
-        ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, labelColumn);
+        Dataset<Row> rawPredictions = model.transform(holdout);
+        ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(rawPredictions, labelColumn);
+        Dataset<Row> predictions = rawPredictions
+                .withColumn("stockout_risk_score",
+                        org.apache.spark.ml.functions.vector_to_array(functions.col("probability")).getItem(1))
+                .withColumn("human_review_required", functions.col("stockout_risk_score").geq(0.65))
+                .withColumn("recommended_action", functions.lit("REVIEW_INVENTORY"))
+                .drop("features", "rawPrediction", "probability");
         model.write().overwrite().save(modelPath);
         return new StockoutResult(model, predictions, train.select(featureColumns.toArray(String[]::new)),
                 quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(), trainCount, holdoutCount);
