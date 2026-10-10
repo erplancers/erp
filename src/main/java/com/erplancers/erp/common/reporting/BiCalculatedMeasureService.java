@@ -22,9 +22,8 @@ public class BiCalculatedMeasureService {
                                            List<CalculatedMeasure> measures,
                                            List<String> runningTotals,
                                            List<PeriodComparison> comparisons) {
-        List<Map<String, Object>> rows = source.stream()
-                .map(LinkedHashMap<String, Object>::new)
-                .toList();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> row : source) rows.add(new LinkedHashMap<>(row));
         List<Map<String, Object>> result = new ArrayList<>(rows.size());
         for (Map<String, Object> row : rows) {
             Map<String, Object> mutable = new LinkedHashMap<>(row);
