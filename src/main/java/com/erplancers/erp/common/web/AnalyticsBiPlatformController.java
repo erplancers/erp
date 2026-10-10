@@ -111,14 +111,13 @@ public class AnalyticsBiPlatformController {
                        r.query_json, r.calculated_measures_json, r.visibility, r.created_at, r.updated_at
                   FROM analytics_saved_report r
                   LEFT JOIN analytics_saved_report_grant g ON g.report_id = r.id
-                 WHERE r.owner_username = ? OR (r.visibility = 'SHARED' AND g.username = ?)
-                       OR g.username = ?
+                 WHERE r.owner_username = ? OR r.visibility = 'SHARED' OR g.username = ?
                  ORDER BY r.updated_at DESC LIMIT 200
                 """, (rs, n) -> view(rs.getString("id"), rs.getString("owner_username"),
                 rs.getString("resource_slug"), rs.getString("report_name"), rs.getString("description"),
                 rs.getString("query_json"), rs.getString("calculated_measures_json"), rs.getString("visibility"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()),
-                auth.getName(), auth.getName(), auth.getName());
+                auth.getName(), auth.getName());
     }
 
     @GetMapping("/reports/{id}")
@@ -129,15 +128,13 @@ public class AnalyticsBiPlatformController {
                        r.query_json, r.calculated_measures_json, r.visibility, r.created_at, r.updated_at
                   FROM analytics_saved_report r
                  WHERE r.id = ? AND (r.owner_username = ? OR
-                       (r.visibility = 'SHARED' AND EXISTS
-                         (SELECT 1 FROM analytics_saved_report_grant g WHERE g.report_id = r.id AND g.username = ?))
-                       OR EXISTS (SELECT 1 FROM analytics_saved_report_grant g
+                       r.visibility = 'SHARED' OR EXISTS (SELECT 1 FROM analytics_saved_report_grant g
                                    WHERE g.report_id = r.id AND g.username = ?))
                 """, (rs, n) -> view(rs.getString("id"), rs.getString("owner_username"),
                 rs.getString("resource_slug"), rs.getString("report_name"), rs.getString("description"),
                 rs.getString("query_json"), rs.getString("calculated_measures_json"), rs.getString("visibility"),
                 rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant()),
-                id, auth.getName(), auth.getName(), auth.getName());
+                id, auth.getName(), auth.getName());
         if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Report not found");
         return rows.getFirst();
     }
@@ -192,6 +189,7 @@ public class AnalyticsBiPlatformController {
         requireOwner(auth, report);
         if (request.recipientEmail() == null || !request.recipientEmail().matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
                 || request.cronExpression() == null || request.cronExpression().length() > 120
+                || !org.springframework.scheduling.support.CronExpression.isValidExpression(request.cronExpression())
                 || !Set.of("CSV", "XLSX", "PDF").contains(Objects.toString(request.exportFormat(), "CSV").toUpperCase(Locale.ROOT))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid subscription");
         }
