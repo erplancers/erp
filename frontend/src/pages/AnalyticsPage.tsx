@@ -28,7 +28,7 @@ const NUMERIC_TYPES = new Set([
 const DATASET_JOBS: Record<string, string[]> = {
   sales_orders: ["RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING"],
   inventory_daily: ["DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING"],
-  order_lines: ["MARKET_BASKET"],
+  order_lines: ["MARKET_BASKET", "PRODUCT_RECOMMENDATIONS"],
   receivables: ["RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING"]
 };
 
@@ -48,6 +48,7 @@ function initialParameters(job: string, datasetKey = "sales_orders"): string {
     case "STOCKOUT_RISK": return JSON.stringify({ trainThroughDate: "2026-09-30", featureColumns: ["recent_demand", "on_hand", "lead_time_days"], labelColumn: "stockout_label" }, null, 2);
     case "INVENTORY_ANOMALY": return JSON.stringify({ zThreshold: 3 }, null, 2);
     case "MARKET_BASKET": return JSON.stringify({ minSupport: 0.01, minConfidence: 0.25 }, null, 2);
+    case "PRODUCT_RECOMMENDATIONS": return JSON.stringify({ topN: 10, rank: 16, maxIterations: 15, regularization: 0.1 }, null, 2);
     case "RECEIVABLES_RISK": return JSON.stringify({ trainThroughDate: "2026-06-30", reviewThreshold: 0.65, featureColumns: ["invoice_amount", "customer_overdue_rate", "historical_average_payment_delay", "payment_terms_days"] }, null, 2);
     case "DATA_DRIFT": return JSON.stringify({
       modelName: datasetKey === "inventory_daily" ? "demand_forecast" : datasetKey === "receivables" ? "receivables_risk" : "customer_segmentation",
@@ -300,7 +301,7 @@ function SparkMlOperations() {
         </div>
       </Card>
 
-      <Message severity="info" text="The source catalogue and tenant/contact/warehouse grants must be configured by an administrator. Receivables risk is decision support only; it never automatically changes credit terms or blocks an order." />
+      <Message severity="info" text="The source catalogue and tenant/contact/warehouse grants must be configured by an administrator. Receivables risk is decision support only; it never automatically changes credit terms or blocks an order. ALS recommendations use transaction IDs as basket contexts, not customer identities." />
       {error && <Message severity="error" text={error} />}
       {notice && <Message severity="success" text={notice} />}
 

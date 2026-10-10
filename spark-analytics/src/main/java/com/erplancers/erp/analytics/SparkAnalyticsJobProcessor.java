@@ -156,6 +156,28 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 metrics.put("outputPath", outputPath);
                 algorithm = "rolling-28-observation-demand-zscore";
             }
+            case "PRODUCT_RECOMMENDATIONS" -> {
+                requireAliases(source, List.of("transaction_id", "product_id"));
+                int topN = intParameter(p, "topN", 10, 1, 100);
+                int rank = intParameter(p, "rank", 16, 2, 128);
+                int maxIterations = intParameter(p, "maxIterations", 15, 1, 100);
+                double regularization = doubleParameter(p, "regularization", 0.1, 0.0, 10.0);
+                modelPath = output + "/als-model";
+                ProductRecommendationMining.Result result = ProductRecommendationMining.recommendForBaskets(
+                        source, "transaction_id", "product_id", topN, rank, maxIterations, regularization, modelPath);
+                outputPath = write(result.recommendations(), output + "/product-recommendations");
+                metrics.put("transactions", result.transactionCount());
+                metrics.put("products", result.productCount());
+                metrics.put("interactions", result.interactionCount());
+                metrics.put("topN", topN);
+                metrics.put("rank", rank);
+                metrics.put("maxIterations", maxIterations);
+                metrics.put("regularization", regularization);
+                metrics.put("recommendationsPath", outputPath);
+                metrics.put("modelPath", modelPath);
+                metrics.put("recommendationScope", "BASKET_CONTEXT_NOT_CUSTOMER_PERSONALIZATION");
+                algorithm = "implicit-feedback-alternating-least-squares";
+            }
             case "MARKET_BASKET" -> {
                 double support = doubleParameter(p, "minSupport", 0.01, 0.0001, 1.0);
                 double confidence = doubleParameter(p, "minConfidence", 0.25, 0.0001, 1.0);

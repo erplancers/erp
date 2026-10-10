@@ -32,12 +32,12 @@ public class AnalyticsJobController {
     private static final Set<String> SUPPORTED_JOBS = Set.of(
             "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
-            "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
+            "MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
                     "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
-            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
+            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET", "PRODUCT_RECOMMENDATIONS")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.ofEntries(
             Map.entry("RFM", Set.of("asOfDate")),
@@ -49,6 +49,7 @@ public class AnalyticsJobController {
             Map.entry("STOCKOUT_RISK", Set.of("featureColumns", "labelColumn", "trainThroughDate")),
             Map.entry("INVENTORY_ANOMALY", Set.of("zThreshold")),
             Map.entry("MARKET_BASKET", Set.of("minSupport", "minConfidence")),
+            Map.entry("PRODUCT_RECOMMENDATIONS", Set.of("topN", "rank", "maxIterations", "regularization")),
             Map.entry("RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate")),
             Map.entry("DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate")),
             Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")));
@@ -157,6 +158,26 @@ public class AnalyticsJobController {
             if ("algorithm".equals(entry.getKey()) && (!(entry.getValue() instanceof String algorithm)
                     || !Set.of("LOGISTIC_REGRESSION", "RANDOM_FOREST", "GRADIENT_BOOSTED_TREES").contains(algorithm))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported churn model algorithm");
+            }
+            if (Set.of("topN", "rank", "maxIterations").contains(entry.getKey())) {
+                if (!(entry.getValue() instanceof Number number) || number.doubleValue() != number.intValue()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, entry.getKey() + " must be an integer");
+                }
+                int value = number.intValue();
+                boolean valid = switch (entry.getKey()) {
+                    case "topN" -> value >= 1 && value <= 100;
+                    case "rank" -> value >= 2 && value <= 128;
+                    case "maxIterations" -> value >= 1 && value <= 100;
+                    default -> false;
+                };
+                if (!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Out-of-range " + entry.getKey());
+            }
+            if ("regularization".equals(entry.getKey())) {
+                if (!(entry.getValue() instanceof Number number)
+                        || !Double.isFinite(number.doubleValue())
+                        || number.doubleValue() < 0.0 || number.doubleValue() > 10.0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "regularization must be a finite number in [0,10]");
+                }
             }
             if (entry.getValue() instanceof String s && s.length() > 500) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parameter value too long");
