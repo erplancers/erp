@@ -36,7 +36,8 @@ public final class SparkAnalyticsWorkerMain {
             spark.sparkContext().setLogLevel(System.getenv().getOrDefault("SPARK_LOG_LEVEL", "WARN"));
             ScopedPostgresReader reader = new ScopedPostgresReader(spark, readUrl, readUser, readPassword);
             AnalyticsJobWorker worker = new AnalyticsJobWorker(store,
-                    new SparkAnalyticsJobProcessor(catalog, reader, store, artifacts), workerId, leaseSeconds);
+                    new SparkAnalyticsJobProcessor(catalog, reader, store, artifacts), workerId, leaseSeconds,
+                    jobId -> spark.sparkContext().cancelJobGroup(jobId));
             while (running.get()) {
                 try {
                     if (!worker.runOne()) Thread.sleep(idleMs);
