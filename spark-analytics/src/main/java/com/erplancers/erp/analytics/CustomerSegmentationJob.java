@@ -71,15 +71,15 @@ public final class CustomerSegmentationJob {
 
         StandardScaler scaler = new StandardScaler().setInputCol("features").setOutputCol("scaledFeatures")
                 .setWithMean(true).setWithStd(true);
-        Dataset<Row> scaled = scaler.fit(vectors).transform(vectors);
         KMeans algorithm = new KMeans()
                 .setK(clusters)
                 .setMaxIter(maxIterations)
                 .setSeed(42L)
                 .setFeaturesCol("scaledFeatures")
                 .setPredictionCol("segment");
-        KMeansModel model = algorithm.fit(scaled);
-        Dataset<Row> clusterAssignments = model.transform(scaled);
+        org.apache.spark.ml.PipelineModel model = new org.apache.spark.ml.Pipeline()
+                .setStages(new org.apache.spark.ml.PipelineStage[]{assembler, scaler, algorithm}).fit(clean);
+        Dataset<Row> clusterAssignments = model.transform(clean);
         double silhouette = new ClusteringEvaluator().setFeaturesCol("scaledFeatures")
                 .setPredictionCol("segment").setMetricName("silhouette").evaluate(clusterAssignments);
         Dataset<Row> scored = clusterAssignments.select(customerIdColumn, "segment");
