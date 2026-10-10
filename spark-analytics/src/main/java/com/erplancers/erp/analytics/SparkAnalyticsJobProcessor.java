@@ -57,7 +57,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String baselinePath = null;
         List<String> modelFeatureColumns = List.of();
         List<DriftObservation> driftObservations = List.of();
-        String outputPath;
+        String outputPath = output + "/unassigned";
 
         switch (job.jobType()) {
             case "RFM" -> {
