@@ -159,6 +159,26 @@ public class AnalyticsJobController {
                     || !Set.of("LOGISTIC_REGRESSION", "RANDOM_FOREST", "GRADIENT_BOOSTED_TREES").contains(algorithm))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported churn model algorithm");
             }
+            if (Set.of("topN", "rank", "maxIterations").contains(entry.getKey())) {
+                if (!(entry.getValue() instanceof Number number) || number.doubleValue() != number.intValue()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, entry.getKey() + " must be an integer");
+                }
+                int value = number.intValue();
+                boolean valid = switch (entry.getKey()) {
+                    case "topN" -> value >= 1 && value <= 100;
+                    case "rank" -> value >= 2 && value <= 128;
+                    case "maxIterations" -> value >= 1 && value <= 100;
+                    default -> false;
+                };
+                if (!valid) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Out-of-range " + entry.getKey());
+            }
+            if ("regularization".equals(entry.getKey())) {
+                if (!(entry.getValue() instanceof Number number)
+                        || !Double.isFinite(number.doubleValue())
+                        || number.doubleValue() < 0.0 || number.doubleValue() > 10.0) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "regularization must be a finite number in [0,10]");
+                }
+            }
             if (entry.getValue() instanceof String s && s.length() > 500) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Parameter value too long");
             }
