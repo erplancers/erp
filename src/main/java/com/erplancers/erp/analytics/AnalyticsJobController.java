@@ -151,6 +151,9 @@ public class AnalyticsJobController {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "featureColumns must be 1-64 safe logical column aliases");
                 }
             }
+            if ("labelColumn".equals(entry.getKey()) && (!(entry.getValue() instanceof String label) || !SAFE_ALIAS.matcher(label).matches())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "labelColumn must be a safe logical column alias");
+            }
             if ("algorithm".equals(entry.getKey()) && (!(entry.getValue() instanceof String algorithm)
                     || !Set.of("LOGISTIC_REGRESSION", "RANDOM_FOREST", "GRADIENT_BOOSTED_TREES").contains(algorithm))) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported churn model algorithm");
