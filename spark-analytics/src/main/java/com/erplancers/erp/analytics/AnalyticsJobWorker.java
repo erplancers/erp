@@ -34,13 +34,15 @@ public final class AnalyticsJobWorker {
             thread.setDaemon(true);
             return thread;
         });
-        long heartbeatSeconds = Math.max(10L, leaseSeconds / 3L);
+        long heartbeatSeconds = Math.min(30L, Math.max(5L, leaseSeconds / 3L));
         ScheduledFuture<?> beat = heartbeat.scheduleAtFixedRate(() -> {
             try {
                 if (!store.renewLease(job, leaseSeconds)) {
                     leaseLost.set(true);
                     cancelSparkJobGroup.accept(job.id());
                     processingThread.interrupt();
+                } else if (store.cancellationRequested(job)) {
+                    cancelSparkJobGroup.accept(job.id());
                 }
             } catch (Exception failure) {
                 leaseLost.set(true);
