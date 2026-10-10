@@ -17,6 +17,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.scheduling.support.CronExpression;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.http.HttpStatus;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -268,6 +270,101 @@ public class BiWorkspaceController {
         return value.replaceAll("[^A-Za-z0-9_-]", "_");
     }
 
+
+    @PostMapping("/reports/{id}/schedules")
+    public ScheduleView createSchedule(Authentication auth, @PathVariable String id,
+                                       @RequestParam String tenantId, @RequestBody CreateScheduleRequest request) {
+        ReportView report = ownedReport(id, tenantId, auth.getName());
+        requireTenant(auth, tenantId);
+        requireResource(auth, report.resourceSlug(), "READ");
+        String cron = requiredText(request.cronExpression(), "cronExpression", 120);
+        String timezone = request.timezone() == null || request.timezone().isBlank() ? "UTC" : request.timezone();
+        String format = request.exportFormat() == null ? "PDF" : request.exportFormat().toUpperCase(Locale.ROOT);
+        if (!Set.of("CSV", "XLSX", "PDF").contains(format)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "exportFormat must be CSV, XLSX, or PDF");
+        }
+        if (request.recipients() == null || request.recipients().isEmpty() || request.recipients().size() > 20
+                || request.recipients().stream().anyMatch(email -> email == null
+                || email.length() > 254 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Provide 1 to 20 valid recipient email addresses");
+        }
+        try {
+            java.time.ZoneId zone = java.time.ZoneId.of(timezone);
+            CronExpression expression = CronExpression.parse(cron);
+            java.time.ZonedDateTime next = expression.next(java.time.ZonedDateTime.now(zone));
+            if (next == null) throw new IllegalArgumentException("Cron has no next execution");
+            String idNew = UUID.randomUUID().toString();
+            jdbc.update("""
+                    INSERT INTO bi_report_schedule
+                      (id, report_id, tenant_id, created_by, cron_expression, timezone,
+                       recipients_json, export_format, enabled, next_run_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)
+                    """, idNew, id, tenantId, auth.getName(), cron, timezone,
+                    mapper.writeValueAsString(request.recipients()), format,
+                    java.sql.Timestamp.from(next.toInstant()));
+            return scheduleById(idNew, tenantId, auth.getName());
+        } catch (java.time.DateTimeException | IllegalArgumentException | JsonProcessingException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid cron expression, timezone, or recipients");
+        }
+    }
+
+    @GetMapping("/reports/{id}/schedules")
+    public List<ScheduleView> schedules(Authentication auth, @PathVariable String id, @RequestParam String tenantId) {
+        ownedReport(id, tenantId, auth.getName());
+        return jdbc.query("""
+                SELECT id, report_id, tenant_id, created_by, cron_expression, timezone, recipients_json,
+                       export_format, enabled, next_run_at, last_run_at, created_at, updated_at
+                  FROM bi_report_schedule WHERE report_id = ? AND tenant_id = ? AND created_by = ?
+                 ORDER BY created_at DESC
+                """, (rs, row) -> mapSchedule(rs), id, tenantId, auth.getName());
+    }
+
+    @PatchMapping("/schedules/{scheduleId}")
+    public ScheduleView setScheduleEnabled(Authentication auth, @PathVariable String scheduleId,
+                                            @RequestParam String tenantId, @RequestBody ToggleScheduleRequest request) {
+        requireTenant(auth, tenantId);
+        int changed = jdbc.update("""
+                UPDATE bi_report_schedule SET enabled = ?, updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ? AND tenant_id = ? AND created_by = ?
+                """, request.enabled(), scheduleId, tenantId, auth.getName());
+        if (changed == 0) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found");
+        return scheduleById(scheduleId, tenantId, auth.getName());
+    }
+
+    @GetMapping("/deliveries")
+    public List<DeliveryView> deliveries(Authentication auth, @RequestParam String tenantId) {
+        requireTenant(auth, tenantId);
+        return jdbc.query("""
+                SELECT id, schedule_id, report_id, tenant_id, requested_by, status, attempts,
+                       available_at, completed_at, error_message, created_at
+                  FROM bi_report_delivery WHERE tenant_id = ? AND requested_by = ?
+                 ORDER BY created_at DESC LIMIT 100
+                """, (rs, row) -> new DeliveryView(rs.getString("id"), rs.getString("schedule_id"),
+                rs.getString("report_id"), rs.getString("tenant_id"), rs.getString("requested_by"),
+                rs.getString("status"), rs.getInt("attempts"), rs.getTimestamp("available_at").toInstant(),
+                rs.getTimestamp("completed_at") == null ? null : rs.getTimestamp("completed_at").toInstant(),
+                rs.getString("error_message"), rs.getTimestamp("created_at").toInstant()), tenantId, auth.getName());
+    }
+
+    private ScheduleView scheduleById(String id, String tenantId, String username) {
+        List<ScheduleView> rows = jdbc.query("""
+                SELECT id, report_id, tenant_id, created_by, cron_expression, timezone, recipients_json,
+                       export_format, enabled, next_run_at, last_run_at, created_at, updated_at
+                  FROM bi_report_schedule WHERE id = ? AND tenant_id = ? AND created_by = ?
+                """, (rs, row) -> mapSchedule(rs), id, tenantId, username);
+        if (rows.isEmpty()) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Schedule not found");
+        return rows.getFirst();
+    }
+
+    private ScheduleView mapSchedule(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new ScheduleView(rs.getString("id"), rs.getString("report_id"), rs.getString("tenant_id"),
+                rs.getString("created_by"), rs.getString("cron_expression"), rs.getString("timezone"),
+                rs.getString("recipients_json"), rs.getString("export_format"), rs.getBoolean("enabled"),
+                rs.getTimestamp("next_run_at").toInstant(),
+                rs.getTimestamp("last_run_at") == null ? null : rs.getTimestamp("last_run_at").toInstant(),
+                rs.getTimestamp("created_at").toInstant(), rs.getTimestamp("updated_at").toInstant());
+    }
+
     @GetMapping("/measures")
     public List<MeasureView> measures(Authentication auth, @RequestParam String tenantId,
                                       @RequestParam String resourceSlug) {
@@ -489,6 +586,14 @@ public class BiWorkspaceController {
         return args.toArray();
     }
 
+    public record CreateScheduleRequest(String cronExpression, String timezone, List<String> recipients, String exportFormat) {}
+    public record ToggleScheduleRequest(boolean enabled) {}
+    public record ScheduleView(String id, String reportId, String tenantId, String createdBy,
+                               String cronExpression, String timezone, String recipientsJson, String exportFormat,
+                               boolean enabled, Instant nextRunAt, Instant lastRunAt, Instant createdAt, Instant updatedAt) {}
+    public record DeliveryView(String id, String scheduleId, String reportId, String tenantId, String requestedBy,
+                               String status, int attempts, Instant availableAt, Instant completedAt,
+                               String errorMessage, Instant createdAt) {}
     public record SaveReportRequest(String tenantId, String name, String resourceSlug,
                                     String definitionJson, String visibility) {}
     public record ShareRequest(String principalType, String principalName, String permission) {}
