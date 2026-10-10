@@ -16,6 +16,7 @@ import { Chart } from "primereact/chart";
 import { Tag } from "primereact/tag";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { BiReportTools } from "../components/BiReportTools";
 
 type FilterOperator = "eq" | "ne" | "like" | "gt" | "gte" | "lt" | "lte" | "isnull" | "notnull";
 type BiRow = Record<string, unknown>;
@@ -57,6 +58,13 @@ export function BiPage() {
   const [includeRank, setIncludeRank] = useState(true);
   const [includeShare, setIncludeShare] = useState(false);
   const [includeGrandTotal, setIncludeGrandTotal] = useState(true);
+  const [calculatedMeasures, setCalculatedMeasures] = useState<Array<{name:string;expression:string}>>([]);
+  const [calcName, setCalcName] = useState("gross_margin");
+  const [calcExpression, setCalcExpression] = useState("");
+  const [runningTotalMeasure, setRunningTotalMeasure] = useState("");
+  const [comparisonName, setComparisonName] = useState("sales");
+  const [currentPeriodMeasure, setCurrentPeriodMeasure] = useState("sum_amount");
+  const [previousPeriodMeasure, setPreviousPeriodMeasure] = useState("previous_sum_amount");
   const [result, setResult] = useState<BiResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,14 +99,27 @@ export function BiPage() {
   function runQuery() {
     if (!credentials || !slug || dimensions.length === 0 || measures.length === 0) return;
     setError(null); setResult(null); setLoading(true);
-    api.biQuery(slug, {
-      dimensions, measures, filters, orderBy: orderBy || undefined,
-      limit: Math.min(1000, Math.max(1, limit)), includeRank,
-      includeShareOfTotal: includeShare, includeGrandTotal
+    api.biCachedQuery(slug, {
+      query: { dimensions, measures, filters, orderBy: orderBy || undefined,
+        limit: Math.min(5000, Math.max(1, limit)), includeRank,
+        includeShareOfTotal: includeShare, includeGrandTotal },
+      calculatedMeasures,
+      runningTotals: runningTotalMeasure ? [runningTotalMeasure] : [],
+      periodComparisons: comparisonName && currentPeriodMeasure && previousPeriodMeasure
+        ? [{ name: comparisonName, currentMeasure: currentPeriodMeasure, previousMeasure: previousPeriodMeasure }] : []
     }, credentials)
-      .then((data: BiResult) => setResult(data))
+      .then(data => setResult(data.report as BiResult))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "BI query failed"))
       .finally(() => setLoading(false));
+  }
+
+  function addCalculatedMeasure() {
+    const name = calcName.trim(), expression = calcExpression.trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) || !expression || expression.length > 500) {
+      setError("Use a valid measure name and arithmetic expression (maximum 500 characters)."); return;
+    }
+    setCalculatedMeasures(previous => [...previous.filter(item => item.name !== name), { name, expression }]);
+    setCalcExpression(""); setError(null);
   }
 
   if (catalog.isPending) return <ProgressSpinner />;
@@ -178,11 +199,31 @@ export function BiPage() {
           <div className="flex align-items-center gap-2"><Checkbox inputId="bi-share" checked={includeShare} onChange={event => setIncludeShare(Boolean(event.checked))} /><label htmlFor="bi-share">Share of total</label></div>
           <div className="flex align-items-center gap-2"><Checkbox inputId="bi-total" checked={includeGrandTotal} onChange={event => setIncludeGrandTotal(Boolean(event.checked))} /><label htmlFor="bi-total">Grand total</label></div>
         </div>
+        <Card title="Calculated measures and time intelligence" className="mt-3">
+          <div className="flex flex-wrap gap-2 align-items-end">
+            <label className="flex flex-column gap-1"><span className="text-sm">Measure name</span><InputText value={calcName} onChange={e=>setCalcName(e.target.value)} /></label>
+            <label className="flex flex-column gap-1" style={{minWidth:"260px",flex:"1"}}><span className="text-sm">Expression</span><InputText value={calcExpression} onChange={e=>setCalcExpression(e.target.value)} placeholder="sum_amount - sum_cost" /></label>
+            <Button label="Add measure" icon="pi pi-plus" onClick={addCalculatedMeasure} />
+          </div>
+          <p className="text-500 text-sm">Use numeric result aliases such as sum_amount. Supports +, -, *, / and parentheses; no SQL or scripting.</p>
+          {calculatedMeasures.length > 0 && <div className="flex flex-wrap gap-2 mb-2">{calculatedMeasures.map(item =>
+            <Tag key={item.name} value={item.name+" = "+item.expression} icon="pi pi-calculator" removable onRemove={()=>setCalculatedMeasures(previous=>previous.filter(m=>m.name!==item.name))} />
+          )}</div>}
+          <div className="flex flex-wrap gap-2 align-items-end">
+            <label className="flex flex-column gap-1"><span className="text-sm">Running total</span>
+              <Dropdown value={runningTotalMeasure} options={[{label:"None",value:""},...measures.map(value=>({label:value.replace(":","_"),value:value.replace(":","_")}))]} onChange={e=>setRunningTotalMeasure(e.value)} placeholder="Optional" />
+            </label>
+            <label className="flex flex-column gap-1"><span className="text-sm">Comparison name</span><InputText value={comparisonName} onChange={e=>setComparisonName(e.target.value)} /></label>
+            <label className="flex flex-column gap-1"><span className="text-sm">Current measure alias</span><InputText value={currentPeriodMeasure} onChange={e=>setCurrentPeriodMeasure(e.target.value)} /></label>
+            <label className="flex flex-column gap-1"><span className="text-sm">Previous-period measure alias</span><InputText value={previousPeriodMeasure} onChange={e=>setPreviousPeriodMeasure(e.target.value)} /></label>
+          </div>
+        </Card>
+        <BiReportTools resourceSlug={slug} query={{dimensions, measures, filters, orderBy:orderBy || "", limit:Math.min(5000,Math.max(1,limit)), includeRank, includeShareOfTotal:includeShare, includeGrandTotal}} calculatedMeasures={calculatedMeasures} />
         <div className="flex flex-wrap gap-2" style={{ marginTop: "1.25rem" }}>
           <Button label="Run analysis" icon="pi pi-play" onClick={runQuery} disabled={!dimensions.length || !measures.length} loading={loading} />
           <Button label="Reset" icon="pi pi-refresh" severity="secondary" outlined onClick={() => {
             setDimensions([]); setMeasures(["count"]); setFilters({}); setFilterField(""); setFilterValue(""); setFilterOperator("eq");
-            setOrderBy("count:desc"); setLimit(100); setIncludeRank(true); setIncludeShare(false); setIncludeGrandTotal(true); setResult(null); setError(null);
+            setOrderBy("count:desc"); setLimit(100); setIncludeRank(true); setIncludeShare(false); setIncludeGrandTotal(true); setCalculatedMeasures([]); setRunningTotalMeasure(""); setResult(null); setError(null);
           }} />
           <Button label="Export CSV" icon="pi pi-download" severity="success" outlined disabled={!rows.length}
             onClick={() => downloadCsv(rows, slug + "-bi-" + new Date().toISOString().slice(0, 10) + ".csv")} />
