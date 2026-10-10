@@ -26,7 +26,7 @@ public final class InventoryMining {
 
     public static ForecastResult forecastDemand(
             Dataset<Row> dailyDemand, String product, String warehouse, String day, String quantity,
-            String trainThroughDate, String modelPath) {
+            String trainThroughDate, String modelPath) throws java.io.IOException {
         SalesIntelligence.requireColumns(dailyDemand, product, warehouse, day, quantity);
         if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
         if (modelPath == null || modelPath.isBlank()) throw new IllegalArgumentException("modelPath is required");
@@ -50,7 +50,7 @@ public final class InventoryMining {
         double mae = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("mae").evaluate(predictions);
         double r2 = new RegressionEvaluator().setLabelCol(quantity).setPredictionCol("prediction").setMetricName("r2").evaluate(predictions);
         model.write().overwrite().save(modelPath);
-        return new ForecastResult(model, predictions, train.select(inputs), rmse, mae, r2, trainCount, testCount);
+        return new ForecastResult(model, predictions, SalesIntelligence.selectColumns(train, inputs), rmse, mae, r2, trainCount, testCount);
     }
 
     /**
@@ -59,7 +59,7 @@ public final class InventoryMining {
      */
     public static StockoutResult trainStockoutRisk(
             Dataset<Row> labelledRows, List<String> featureColumns, String labelColumn,
-            double trainFraction, String modelPath) {
+            double trainFraction, String modelPath) throws java.io.IOException {
         if (featureColumns == null || featureColumns.isEmpty()) throw new IllegalArgumentException("featureColumns is required");
         if (!(trainFraction >= 0.5 && trainFraction < 0.95)) throw new IllegalArgumentException("trainFraction must be in [0.5, 0.95)");
         if (modelPath == null || modelPath.isBlank()) throw new IllegalArgumentException("modelPath is required");
@@ -82,7 +82,7 @@ public final class InventoryMining {
         Dataset<Row> predictions = model.transform(split[1]);
         ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(predictions, labelColumn);
         model.write().overwrite().save(modelPath);
-        return new StockoutResult(model, predictions, split[0].select(featureColumns.toArray(String[]::new)),
+        return new StockoutResult(model, predictions, SalesIntelligence.selectColumns(split[0], featureColumns.toArray(String[]::new)),
                 quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(), trainCount, holdoutCount);
     }
 
@@ -91,7 +91,7 @@ public final class InventoryMining {
     /** Preferred production variant: evaluates against a strictly later, date-based holdout. */
     public static StockoutResult trainStockoutRiskTimeOrdered(
             Dataset<Row> labelledRows, List<String> featureColumns, String labelColumn,
-            String dateColumn, List<String> identifierColumns, String trainThroughDate, String modelPath) {
+            String dateColumn, List<String> identifierColumns, String trainThroughDate, String modelPath) throws java.io.IOException {
         if (featureColumns == null || featureColumns.isEmpty()) throw new IllegalArgumentException("featureColumns is required");
         if (trainThroughDate == null || trainThroughDate.isBlank()) throw new IllegalArgumentException("trainThroughDate is required");
         if (modelPath == null || modelPath.isBlank()) throw new IllegalArgumentException("modelPath is required");
@@ -111,7 +111,7 @@ public final class InventoryMining {
     }
 
     private static StockoutResult fitStockout(Dataset<Row> train, Dataset<Row> holdout,
-                                               List<String> featureColumns, String labelColumn, String modelPath) {
+                                               List<String> featureColumns, String labelColumn, String modelPath) throws java.io.IOException {
         long trainCount = train.count(), holdoutCount = holdout.count();
         if (trainCount < 20 || holdoutCount < 10) {
             throw new IllegalArgumentException("Stock-out risk requires >=20 training and >=10 holdout rows");
@@ -126,12 +126,12 @@ public final class InventoryMining {
         ModelMonitoring.ClassificationMetrics quality = ModelMonitoring.classification(rawPredictions, labelColumn);
         Dataset<Row> predictions = rawPredictions
                 .withColumn("stockout_risk_score",
-                        org.apache.spark.ml.functions.vector_to_array(functions.col("probability")).getItem(1))
+                        org.apache.spark.ml.functions.vector_to_array(functions.col("probability"), "float64").getItem(1))
                 .withColumn("human_review_required", functions.col("stockout_risk_score").geq(0.65))
                 .withColumn("recommended_action", functions.lit("REVIEW_INVENTORY"))
                 .drop("features", "rawPrediction", "probability");
         model.write().overwrite().save(modelPath);
-        return new StockoutResult(model, predictions, train.select(featureColumns.toArray(String[]::new)),
+        return new StockoutResult(model, predictions, SalesIntelligence.selectColumns(train, featureColumns.toArray(String[]::new)),
                 quality.areaUnderRoc(), quality.weightedPrecision(), quality.weightedRecall(), trainCount, holdoutCount);
     }
 
