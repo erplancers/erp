@@ -2,6 +2,9 @@ package com.erplancers.erp.analytics;
 
 import java.sql.SQLException;
 import java.util.Objects;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /** Single-iteration worker loop; run multiple replicas safely using PostgreSQL row leases. */
 public final class AnalyticsJobWorker {
@@ -9,33 +12,58 @@ public final class AnalyticsJobWorker {
     private final AnalyticsJobHandler handler;
     private final String workerId;
     private final int leaseSeconds;
+    private final Consumer<String> cancelSparkJobGroup;
 
-    public AnalyticsJobWorker(AnalyticsJobStore store, AnalyticsJobHandler handler, String workerId, int leaseSeconds) {
+    public AnalyticsJobWorker(AnalyticsJobStore store, AnalyticsJobHandler handler, String workerId,
+                              int leaseSeconds, Consumer<String> cancelSparkJobGroup) {
         this.store = Objects.requireNonNull(store);
         this.handler = Objects.requireNonNull(handler);
         this.workerId = Objects.requireNonNull(workerId);
         this.leaseSeconds = leaseSeconds;
+        this.cancelSparkJobGroup = cancelSparkJobGroup == null ? ignored -> {} : cancelSparkJobGroup;
     }
 
     /** @return true if a job was claimed and processed. */
     public boolean runOne() throws SQLException {
         AnalyticsJobStore.Job job = store.claimNext(workerId, leaseSeconds);
         if (job == null) return false;
+        AtomicBoolean leaseLost = new AtomicBoolean(false);
+        Thread processingThread = Thread.currentThread();
+        ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread thread = new Thread(r, "analytics-lease-heartbeat");
+            thread.setDaemon(true);
+            return thread;
+        });
+        long heartbeatSeconds = Math.max(10L, leaseSeconds / 3L);
+        ScheduledFuture<?> beat = heartbeat.scheduleAtFixedRate(() -> {
+            try {
+                if (!store.renewLease(job, leaseSeconds)) {
+                    leaseLost.set(true);
+                    cancelSparkJobGroup.accept(job.id());
+                    processingThread.interrupt();
+                }
+            } catch (Exception failure) {
+                leaseLost.set(true);
+                cancelSparkJobGroup.accept(job.id());
+                processingThread.interrupt();
+            }
+        }, heartbeatSeconds, heartbeatSeconds, TimeUnit.SECONDS);
         AnalyticsJobHandler.JobExecutionContext context = new AnalyticsJobHandler.JobExecutionContext() {
-            @Override public boolean cancellationRequested() throws Exception { return store.cancellationRequested(job); }
+            @Override public boolean cancellationRequested() throws Exception {
+                return leaseLost.get() || store.cancellationRequested(job);
+            }
             @Override public void checkCancellation() throws Exception {
-                if (cancellationRequested()) throw new JobCancelledException("Cancellation requested");
+                if (leaseLost.get()) throw new JobCancelledException("Worker lost its database lease");
+                if (store.cancellationRequested(job)) throw new JobCancelledException("Cancellation requested or lease lost");
             }
         };
         try {
             context.checkCancellation();
             AnalyticsJobHandler.JobResult result = handler.execute(job, context);
             context.checkCancellation();
+            for (AnalyticsJobHandler.DriftObservation drift : result.driftObservations()) store.recordDrift(job, drift);
             store.recordExperiment(job, result.algorithm(), result.parametersJson(),
                     result.metricsJson(), result.inputSnapshot(), "SUCCEEDED");
-            for (AnalyticsJobHandler.DriftObservation drift : result.driftObservations()) {
-                store.recordDrift(job, drift);
-            }
             if (result.artifactUri() != null && !result.artifactUri().isBlank()) {
                 store.registerCandidate(job, job.jobType().toLowerCase(java.util.Locale.ROOT),
                         result.artifactUri(), result.manifestJson(), result.metricsJson());
@@ -47,8 +75,14 @@ public final class AnalyticsJobWorker {
             try {
                 store.recordExperiment(job, job.jobType(), job.parametersJson(),
                         "{\"executionFailure\":true}", null, "FAILED_ATTEMPT");
-            } catch (SQLException trackingFailure) { failure.addSuppressed(trackingFailure); }
+            } catch (SQLException trackingFailure) {
+                failure.addSuppressed(trackingFailure);
+            }
             store.fail(job, workerId, failure);
+        } finally {
+            beat.cancel(true);
+            heartbeat.shutdownNow();
+            Thread.interrupted();
         }
         return true;
     }
