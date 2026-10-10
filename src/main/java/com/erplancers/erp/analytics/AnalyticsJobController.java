@@ -35,7 +35,7 @@ public class AnalyticsJobController {
             "MARKET_BASKET", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
-                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "MARKET_BASKET", "DATA_DRIFT", "MODEL_SCORING")),
+                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "DATA_DRIFT", "MODEL_SCORING")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
