@@ -94,3 +94,18 @@ CREATE TABLE IF NOT EXISTS analytics_drift_metric (
 );
 CREATE INDEX IF NOT EXISTS ix_analytics_drift_lookup
     ON analytics_drift_metric(tenant_id, model_name, measured_at);
+
+
+CREATE TABLE IF NOT EXISTS analytics_model_review (
+    id VARCHAR(36) PRIMARY KEY,
+    tenant_id VARCHAR(160) NOT NULL,
+    model_name VARCHAR(160) NOT NULL,
+    model_version INTEGER NOT NULL,
+    action VARCHAR(40) NOT NULL,
+    to_status VARCHAR(30) NOT NULL,
+    reviewer VARCHAR(120) NOT NULL,
+    review_note VARCHAR(1000),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_analytics_model_review_lookup
+    ON analytics_model_review(tenant_id, model_name, created_at);
