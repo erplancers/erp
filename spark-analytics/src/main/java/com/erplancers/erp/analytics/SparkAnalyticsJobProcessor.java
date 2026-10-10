@@ -40,6 +40,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         context.checkCancellation();
         String scopeFingerprint = reader.scopeFingerprint(definition, job);
         Dataset<Row> source = reader.read(definition, job);
+        source.sparkSession().sparkContext().setJobGroup(job.id(), "ERP analytics " + job.jobType(), true);
         String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id();
         String inputEvidence = "source=" + definition.table() + "; filtered-at-execution=" + Instant.now();
         Map<String, Object> metrics = new LinkedHashMap<>();
