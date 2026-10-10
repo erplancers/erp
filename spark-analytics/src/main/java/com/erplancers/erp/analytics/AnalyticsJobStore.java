@@ -245,7 +245,7 @@ public final class AnalyticsJobStore {
     private long metricCount(String json, String key) {
         if (json == null || key == null) return 0L;
         java.util.regex.Matcher matcher = java.util.regex.Pattern
-                .compile("\\"" + java.util.regex.Pattern.quote(key) + "\\"\\s*:\\s*(\\d+)")
+                .compile("\"" + java.util.regex.Pattern.quote(key) + "\"\\s*:\\s*(\\d+)")
                 .matcher(json);
         if (!matcher.find()) return 0L;
         try { return Long.parseLong(matcher.group(1)); }
