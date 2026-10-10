@@ -301,7 +301,7 @@ function SparkMlOperations() {
         </div>
       </Card>
 
-      <Message severity="info" text="The source catalogue and tenant/contact/warehouse grants must be configured by an administrator. Receivables risk is decision support only; it never automatically changes credit terms or blocks an order." />
+      <Message severity="info" text="The source catalogue and tenant/contact/warehouse grants must be configured by an administrator. Receivables risk is decision support only; it never automatically changes credit terms or blocks an order. ALS recommendations use transaction IDs as basket contexts, not customer identities." />
       {error && <Message severity="error" text={error} />}
       {notice && <Message severity="success" text={notice} />}
 
