@@ -34,6 +34,16 @@ class CalculatedMeasureExpressionTest {
                 () -> CalculatedMeasureExpression.evaluate("1; DROP TABLE x", Map.of()));
     }
 
+
+    @Test void validatesSyntaxWithoutAllowingArbitraryFunctions() {
+        assertDoesNotThrow(() -> CalculatedMeasureExpression.validate("margin(sum_revenue, sum_cost)"));
+        assertDoesNotThrow(() -> CalculatedMeasureExpression.validate("runningTotal(sum_amount)"));
+        assertThrows(IllegalArgumentException.class,
+                () -> CalculatedMeasureExpression.validate("exec('drop table')"));
+        assertThrows(IllegalArgumentException.class,
+                () -> CalculatedMeasureExpression.validate("sum_revenue + )"));
+    }
+
     @Test void evaluatesRunningTotalInCallerProvidedChronologicalOrder() {
         List<Double> result = CalculatedMeasureExpression.evaluateRunningTotal("amount", List.of(
                 Map.of("amount", 2), Map.of("amount", 3.5), Map.of("amount", 4)));
