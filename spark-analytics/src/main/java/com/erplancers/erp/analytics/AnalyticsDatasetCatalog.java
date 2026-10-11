@@ -58,7 +58,7 @@ public final class AnalyticsDatasetCatalog {
             for (String item : sourceColumns.split(",")) {
                 String[] pieces = item.trim().split(":", -1);
                 if (pieces.length != 2) throw new IllegalArgumentException("Column mapping must be source:alias in " + key);
-                validateIdentifier(pieces[0], "source column");
+                validatePath(pieces[0], "source attribute");
                 validateIdentifier(pieces[1], "logical alias");
                 if (!aliases.add(pieces[1])) throw new IllegalArgumentException("Duplicate logical alias: " + pieces[1]);
                 projections.add(new Projection(pieces[0], pieces[1]));
