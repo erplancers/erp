@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
 
-/** Loads an operator-managed source allowlist; no submitted job can change physical SQL sources. */
+/** Loads an operator-managed allowlist of JPA entities and mapped attributes. */
 public final class AnalyticsDatasetCatalog {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}");
     private static final Pattern TABLE = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}(\\.[A-Za-z_][A-Za-z0-9_]{0,62})?");
@@ -17,6 +17,7 @@ public final class AnalyticsDatasetCatalog {
     public record DatasetDefinition(String key, String table, List<Projection> projections,
                                     String tenantColumn, String scopeColumn, String scopeType) {
         public DatasetDefinition { projections = List.copyOf(projections); }
+        public String entityName() { return table; }
         public Set<String> logicalColumns() {
             Set<String> names = new HashSet<>();
             projections.forEach(p -> names.add(p.logicalAlias()));
@@ -34,15 +35,17 @@ public final class AnalyticsDatasetCatalog {
         Set<String> keys = new TreeSet<>();
         String prefix = "analytics.datasets.";
         for (String name : properties.stringPropertyNames()) {
-            if (name.startsWith(prefix) && name.endsWith(".table")) {
-                keys.add(name.substring(prefix.length(), name.length() - ".table".length()));
+            if (name.startsWith(prefix) && (name.endsWith(".entity") || name.endsWith(".table"))) {
+                keys.add(name.substring(prefix.length(), name.lastIndexOf('.')));
             }
         }
         if (keys.isEmpty()) throw new IllegalArgumentException("No analytics dataset definitions configured");
         Map<String, DatasetDefinition> result = new HashMap<>();
         for (String key : keys) {
             String base = prefix + key + ".";
-            String table = required(properties, base + "table");
+            String table = properties.getProperty(base + "entity");
+            if (table == null || table.isBlank()) table = required(properties, base + "table");
+            else table = table.trim();
             String sourceColumns = required(properties, base + "columns");
             String tenantColumn = required(properties, base + "tenant-column");
             String scopeColumn = required(properties, base + "scope-column");
