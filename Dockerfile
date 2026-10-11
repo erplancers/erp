@@ -1,13 +1,14 @@
-FROM eclipse-temurin:25-jdk AS build
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 COPY gradlew gradlew
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
+COPY spark-analytics ./spark-analytics
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
 COPY src src
 RUN ./gradlew bootJar --no-daemon
 
-FROM eclipse-temurin:25-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends wget \
