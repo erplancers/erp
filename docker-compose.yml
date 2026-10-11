@@ -59,43 +59,27 @@ services:
       ERP_REGISTRATION_ADMIN_TOKEN: ${ERP_REGISTRATION_ADMIN_TOKEN:?Set ERP_REGISTRATION_ADMIN_TOKEN in .env}
       SERVER_FORWARD_HEADERS_STRATEGY: framework
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    networks: [erp]
-
-  # Opt-in worker. Provide an operator-approved source catalogue before starting this profile.
-  analytics-worker:
-    profiles: ["analytics"]
-    build:
-      context: .
-      dockerfile: Dockerfile.spark-analytics
-    restart: unless-stopped
-    environment:
+      ANALYTICS_ENGINE_ENABLED: ${ANALYTICS_ENGINE_ENABLED:-false}
       ANALYTICS_METADATA_JDBC_URL: jdbc:postgresql://postgres:5432/erplancers
-      ANALYTICS_METADATA_USER: erplancers
-      ANALYTICS_METADATA_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      ANALYTICS_METADATA_USER: ${ANALYTICS_METADATA_USER:-erplancers}
+      ANALYTICS_METADATA_PASSWORD: ${ANALYTICS_METADATA_PASSWORD:-${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}}
       ANALYTICS_READ_JDBC_URL: jdbc:postgresql://postgres:5432/erplancers
       ANALYTICS_READ_USER: ${ANALYTICS_READ_USER:-erplancers}
       ANALYTICS_READ_PASSWORD: ${ANALYTICS_READ_PASSWORD:-${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}}
       ANALYTICS_DATASETS_CONFIG: /run/config/analytics-datasets.properties
       ANALYTICS_ARTIFACT_URI: file:/var/lib/erplancers/analytics
-      ANALYTICS_WORKER_ID: analytics-worker-1
+      ANALYTICS_WORKER_ID: erp-backend-embedded
       ANALYTICS_IDLE_POLL_MS: 1000
       ANALYTICS_JOB_LEASE_SECONDS: 900
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       SPARK_MASTER: local[*]
+      SPARK_LOG_LEVEL: WARN
     volumes:
-      - ./deploy/analytics-datasets.properties:/run/config/analytics-datasets.properties:ro
+      - ./deploy:/run/config:ro
       - analytics_artifacts:/var/lib/erplancers/analytics
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_healthy
-      backend:
         condition: service_healthy
     networks: [erp]
 
