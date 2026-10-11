@@ -67,7 +67,7 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
             fields.add(DataTypes.createStructField(projection.logicalAlias(),
                     sparkType(path.getJavaType()), true));
         }
-        query.multiselect(selected);
+        query.multiselect(selected.toArray(jakarta.persistence.criteria.Selection<?>[]::new));
 
         List<String> grantedScopes = activeScopes(definition, job);
         if (grantedScopes.isEmpty()) {
