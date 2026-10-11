@@ -175,7 +175,7 @@ public class ErpBiEngine {
             includeRank = Boolean.TRUE.equals(includeRank);
             includeShareOfTotal = Boolean.TRUE.equals(includeShareOfTotal);
             includeGrandTotal = Boolean.TRUE.equals(includeGrandTotal);
-            calculatedMeasures = calculatedMeasures == null ? Map.of() : Map.copyOf(calculatedMeasures);
+            calculatedMeasures = calculatedMeasures == null ? Map.of() : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(calculatedMeasures));
         }
 
         public BiQuery(List<String> dimensions, List<String> measures, Map<String, String> filters,
