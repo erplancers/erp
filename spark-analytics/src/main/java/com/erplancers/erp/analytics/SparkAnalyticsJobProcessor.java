@@ -48,7 +48,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         long sourceRows = source.count();
         String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id()
                 + "/attempt-" + job.attemptCount();
-        String inputEvidence = "source=" + definition.table() + "; rows=" + sourceRows
+        String inputEvidence = "source=" + definition.entityName() + "; rows=" + sourceRows
                 + "; extractedAt=" + Instant.now() + "; scopeFingerprint=" + scopeFingerprint;
         Map<String, Object> metrics = new LinkedHashMap<>();
         String algorithm = job.jobType();
@@ -272,7 +272,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 String configuredProjections = definition.projections().stream()
                         .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
                         .collect(Collectors.joining(","));
-                if (!definition.table().equals(manifestNode.path("sourceTable").asText(""))
+                if (!definition.entityName().equals(manifestNode.path("sourceTable").asText(""))
                         || !configuredProjections.equals(manifestNode.path("sourceProjections").asText(""))) {
                     throw new SecurityException("Approved source mapping changed since model training");
                 }
@@ -383,7 +383,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
                 String configuredProjections = definition.projections().stream()
                         .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
                         .collect(Collectors.joining(","));
-                if (!definition.table().equals(expectedTable) || !configuredProjections.equals(expectedProjections)) {
+                if (!definition.entityName().equals(expectedTable) || !configuredProjections.equals(expectedProjections)) {
                     throw new SecurityException("Approved source mapping changed since the model baseline was created");
                 }
                 if (!definition.scopeType().equals(manifestNode.path("scopeType").asText(""))
@@ -444,7 +444,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String manifest = json.writeValueAsString(Map.ofEntries(
                 Map.entry("modelType", algorithm), Map.entry("jobId", job.id()),
                 Map.entry("tenantId", job.tenantId()), Map.entry("createdBy", job.requestedBy()),
-                Map.entry("datasetKey", job.datasetKey()), Map.entry("sourceTable", definition.table()),
+                Map.entry("datasetKey", job.datasetKey()), Map.entry("sourceTable", definition.entityName()),
                 Map.entry("sourceProjections", definition.projections().stream()
                         .map(projection -> projection.sourceColumn() + ":" + projection.logicalAlias())
                         .collect(Collectors.joining(","))),
