@@ -2,6 +2,7 @@ package com.erplancers.erp.analytics;
 
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructType;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.sql.Date;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,13 +22,9 @@ class SalesTrendIntelligenceTest {
 
     @BeforeAll
     static void startSpark() {
-        // MetricsSystem reads this JVM property while SparkContext is constructed.
-        // Keep the test config free of the servlet sink: Spark 4's shaded Jetty expects
-        // jakarta.servlet.SingleThreadModel, which Spring Boot 4's Servlet API no longer has.
-        System.setProperty("spark.metrics.conf",
-                Path.of("src/test/resources/spark-metrics.properties").toAbsolutePath().toString());
         String metricsConfig = Path.of("src/test/resources/spark-metrics.properties")
                 .toAbsolutePath().toString();
+        System.setProperty("spark.metrics.conf", metricsConfig);
         spark = SparkSession.builder()
                 .config("spark.metrics.conf", metricsConfig)
                 .appName("sales-trend-intelligence-test")
@@ -50,16 +48,13 @@ class SalesTrendIntelligenceTest {
     }
 
     @Test
-    void fillsCalendarGapsAndCalculatesMonthlyMetrics() {
-        Dataset<Row> source = orders(
-                row("o-1", "2026-01-05", 40.0),
-                row("o-2", "2026-01-19", 60.0),
-                row("o-3", "2026-03-12", 300.0));
+    void aggregatesRevenueAndFillsMissingCalendarMonths() {
+        List<Row> trends = trends(
+                order("jan-a", "2026-01-05", 40.0),
+                order("jan-b", "2026-01-19", 60.0),
+                order("mar-a", "2026-03-12", 300.0));
 
-        List<Row> trends = SalesTrendIntelligence.monthlyTrends(
-                source, "order_id", "order_date", "net_amount").collectAsList();
-
-        assertEquals(3, trends.size(), "A missing month must still appear in the output");
+        assertEquals(3, trends.size());
         assertMonth(trends.get(0), "2026-01-01");
         assertNumber(trends.get(0), "revenue", 100.0);
         assertNumber(trends.get(0), "order_count", 2.0);
@@ -76,22 +71,19 @@ class SalesTrendIntelligenceTest {
         assertNumber(trends.get(2), "revenue", 300.0);
         assertNumber(trends.get(2), "trailing_3_month_avg_revenue", 400.0 / 3.0);
         assertNull(trends.get(2).getAs("mom_growth_pct"),
-                "Growth is undefined when the prior month revenue is zero");
+                "Growth must be undefined when previous-month revenue is zero");
         assertNull(trends.get(2).getAs("yoy_growth_pct"),
-                "Year-over-year growth needs a prior-year value");
+                "Year-over-year growth needs a prior-year month");
     }
 
     @Test
-    void filtersRowsWithMissingRequiredValuesAndCountsDistinctOrders() {
-        Dataset<Row> source = orders(
-                row("same-order", "2026-04-02", 12.0),
-                row("same-order", "2026-04-03", 8.0),
-                row(null, "2026-04-04", 100.0),
-                row("missing-date", null, 100.0),
-                row("missing-amount", "2026-04-05", null));
-
-        List<Row> trends = SalesTrendIntelligence.monthlyTrends(
-                source, "order_id", "order_date", "net_amount").collectAsList();
+    void ignoresIncompleteOrdersAndCountsDistinctOrderIds() {
+        List<Row> trends = trends(
+                order("duplicate", "2026-04-02", 12.0),
+                order("duplicate", "2026-04-03", 8.0),
+                order(null, "2026-04-04", 100.0),
+                order("missing-date", null, 100.0),
+                order("missing-amount", "2026-04-05", null));
 
         assertEquals(1, trends.size());
         assertNumber(trends.get(0), "revenue", 20.0);
@@ -100,43 +92,58 @@ class SalesTrendIntelligenceTest {
     }
 
     @Test
-    void computesYearOverYearGrowthAcrossAFullCalendarYear() {
-        List<Row> input = new java.util.ArrayList<>();
+    void computesYearOverYearGrowthUsingTheSameCalendarMonth() {
+        List<Row> input = new ArrayList<>();
         for (int month = 1; month <= 12; month++) {
-            input.add(org.apache.spark.sql.RowFactory.create(
-                    "old-" + month, Date.valueOf(String.format("2025-%02d-10", month)), 100.0));
+            input.add(RowFactory.create(order("old-" + month, String.format("2025-%02d-10", month), 100.0)));
         }
-        input.add(org.apache.spark.sql.RowFactory.create(
-                "new-1", Date.valueOf("2026-01-10"), 150.0));
-        Dataset<Row> source = spark.createDataFrame(input, schema());
+        input.add(RowFactory.create(order("new-jan", "2026-01-10", 150.0)));
 
-        List<Row> trends = SalesTrendIntelligence.monthlyTrends(
-                source, "order_id", "order_date", "net_amount").collectAsList();
+        List<Row> result = SalesTrendIntelligence.monthlyTrends(
+                dataset(input), "order_id", "order_date", "net_amount").collectAsList();
 
-        assertEquals(13, trends.size());
-        Row january2026 = trends.get(12);
+        assertEquals(13, result.size());
+        Row january2026 = result.get(12);
         assertMonth(january2026, "2026-01-01");
         assertNumber(january2026, "prior_year_revenue", 100.0);
         assertNumber(january2026, "yoy_growth_pct", 50.0);
     }
 
     @Test
-    void rejectsMissingDatasetAndMissingColumnNames() {
-        assertThrows(IllegalArgumentException.class,
-                () -> SalesIntelligence.requireColumns(null, "order_id"));
-        assertThrows(IllegalArgumentException.class,
-                () -> SalesIntelligence.requireColumns(null, (String[]) null));
+    void returnsNoRowsForAnEmptyDataset() {
+        Dataset<Row> empty = spark.createDataFrame(List.of(), schema());
+
+        assertTrue(SalesTrendIntelligence.monthlyTrends(
+                empty, "order_id", "order_date", "net_amount").collectAsList().isEmpty());
     }
 
-    private static Dataset<Row> orders(Object[]... values) {
-        List<Row> rows = new java.util.ArrayList<>();
-        for (Object[] value : values) {
-            rows.add(org.apache.spark.sql.RowFactory.create(value));
+    @Test
+    void rejectsNullDatasetAndMissingColumnNames() {
+        assertThrows(IllegalArgumentException.class,
+                () -> SalesTrendIntelligence.monthlyTrends(null, "order_id", "order_date", "net_amount"));
+        assertThrows(IllegalArgumentException.class,
+                () -> SalesTrendIntelligence.monthlyTrends(dataset(List.of()),
+                        "order_id", "unknown_date", "net_amount"));
+        assertThrows(IllegalArgumentException.class,
+                () -> SalesTrendIntelligence.monthlyTrends(dataset(List.of()),
+                        " ", "order_date", "net_amount"));
+    }
+
+    private static List<Row> trends(Object[]... orders) {
+        List<Row> rows = new ArrayList<>();
+        for (Object[] order : orders) {
+            rows.add(RowFactory.create(order));
         }
+        return SalesTrendIntelligence.monthlyTrends(
+                spark.createDataFrame(rows, schema()),
+                "order_id", "order_date", "net_amount").collectAsList();
+    }
+
+    private static Dataset<Row> dataset(List<Row> rows) {
         return spark.createDataFrame(rows, schema());
     }
 
-    private static Object[] row(String id, String date, Double amount) {
+    private static Object[] order(String id, String date, Double amount) {
         return new Object[] {
                 id,
                 date == null ? null : Date.valueOf(date),
@@ -156,8 +163,8 @@ class SalesTrendIntelligenceTest {
     }
 
     private static void assertNumber(Row row, String column, double expected) {
-        Object value = row.getAs(column);
-        assertNotNull(value, column + " should not be null");
-        assertEquals(expected, ((Number) value).doubleValue(), 0.001, column);
+        Object actual = row.getAs(column);
+        assertNotNull(actual, column + " should not be null");
+        assertEquals(expected, ((Number) actual).doubleValue(), 0.001, column);
     }
 }
