@@ -3,8 +3,7 @@ package com.erplancers.erp.analytics;
 import org.apache.spark.sql.SparkSession;
 
 /**
- * Creates the Spark session for an explicitly launched analytics worker.
- * Spark is intentionally isolated from the Spring web application's runtime.
+ * Creates the Spark session for either the embedded ERP engine or standalone worker.
  */
 public final class SparkSessionProvider implements AutoCloseable {
     private final SparkSession session;
