@@ -88,7 +88,7 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
         query.where(cb.and(predicates.toArray(Predicate[]::new)));
 
         StructType schema = DataTypes.createStructType(fields);
-        SparkSession spark = sparkProvider.session();
+        SparkSession spark = SparkSession.builder().getOrCreate();
         List<Row> rows = new ArrayList<>();
         int offset = 0;
         while (true) {
@@ -173,7 +173,7 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
         if (path.getModel() instanceof SingularAttribute<?, ?> attribute
                 && attribute.getPersistentAttributeType().name().matches("MANY_TO_ONE|ONE_TO_ONE")) {
             EntityType<?> related = entityManager.getMetamodel().entity(path.getJavaType());
-            String idName = related.getId(Object.class).getName();
+            String idName = related.getSingularAttributes().stream()\n                    .filter(SingularAttribute::isId)\n                    .map(SingularAttribute::getName)\n                    .findFirst().orElseThrow(() -> new IllegalArgumentException(\n                            "Scope relationship has no simple JPA identifier: " + name));
             return path.get(idName);
         }
         return path;
