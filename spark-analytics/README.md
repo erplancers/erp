@@ -1,11 +1,8 @@
 # ERP Business Intelligence and ML Platform
 
-The repository contains two separately deployed pieces:
+The Spark SQL/MLlib engine is included as a Gradle project dependency of the main Spring Boot backend and runs in the same JVM on a managed lifecycle thread. Authenticated API endpoints enqueue jobs; the engine claims PostgreSQL-leased jobs in the background and writes artifacts/Parquet results to protected storage. Kafka notifications wake the engine promptly, with PostgreSQL polling as a fallback. The optional standalone worker entry point remains available for isolated development or deployment, but Docker Compose uses the embedded backend engine.
 
-- **Spring Boot control plane** — authenticated job submission/status/cancellation, tenant grants, experiment/model registry APIs, audited model promotion/rollback, and daily drift scheduling.
-- **Spark worker** — a separate JVM process running Spark SQL and Spark MLlib jobs. It reads from explicitly allowlisted PostgreSQL views with tenant/entity-scope filtering applied in PostgreSQL, then stores artifacts and Parquet results in protected storage.
-
-Spark does not execute inside ordinary ERP CRUD HTTP requests. The current implementation is a production-oriented foundation; it is not a substitute for staging, threat-model review, real-schema mapping, performance/load testing, and operational runbooks before a production rollout.
+Spark never executes on ordinary ERP CRUD HTTP request threads. The current implementation is a production-oriented foundation; it is not a substitute for staging, threat-model review, real-schema mapping, performance/load testing, and operational runbooks before a production rollout.
 
 ## Included analytics
 
@@ -93,6 +90,7 @@ Available environment variables:
 
 | Variable | Purpose |
 | --- | --- |
+| `ANALYTICS_ENGINE_ENABLED` | Enable the embedded engine in the backend; default `false` until real mappings and DB grants are configured |
 | `ANALYTICS_METADATA_JDBC_URL` | PostgreSQL URL for analytics metadata/job queue |
 | `ANALYTICS_METADATA_USER`, `ANALYTICS_METADATA_PASSWORD` | Metadata DB credentials |
 | `ANALYTICS_READ_JDBC_URL` | PostgreSQL URL for approved source views and grants |
@@ -107,13 +105,7 @@ Available environment variables:
 | `ANALYTICS_JOB_LEASE_SECONDS` | Lease duration (60–7200), default 900 |
 | `ANALYTICS_DRIFT_CRON` | Optional; app scheduler property `analytics.drift.cron`, default daily 02:30 UTC |
 
-Run the worker:
-
-```sh
-./gradlew :spark-analytics:runWorker --no-daemon
-```
-
-Run it as a dedicated service identity with bounded CPU/memory, concurrency controls, timeouts, log rotation and alerting. Put the worker behind process/container supervision. For a Spark cluster, deploy on appropriately sized nodes and configure executor memory/cores and artifact storage permissions; local mode is for development only.
+For the default Docker Compose deployment, configure `deploy/analytics-datasets.properties`, set `ANALYTICS_ENGINE_ENABLED=true` in `.env`, and recreate the backend. See [deployment instructions](../DEPLOYMENT.md). The standalone development entry point can still be run with `./gradlew :spark-analytics:runWorker --no-daemon`, but it must have all `ANALYTICS_*` environment variables set. Embedded mode shares the backend's CPU and memory; enforce container limits and monitor Spark heap/GC and job concurrency.
 
 ### Source aliases required by built-in jobs
 
