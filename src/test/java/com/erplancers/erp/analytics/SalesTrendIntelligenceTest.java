@@ -89,9 +89,9 @@ class SalesTrendIntelligenceTest {
     void computesYearOverYearGrowthUsingTheSameCalendarMonth() {
         List<Row> input = new ArrayList<>();
         for (int month = 1; month <= 12; month++) {
-            input.add(order("old-" + month, String.format("2025-%02d-10", month), 100.0));
+            input.add(RowFactory.create(order("old-" + month, String.format("2025-%02d-10", month), 100.0)));
         }
-        input.add(order("new-jan", "2026-01-10", 150.0));
+        input.add(RowFactory.create(order("new-jan", "2026-01-10", 150.0)));
 
         List<Row> result = SalesTrendIntelligence.monthlyTrends(
                 dataset(input), "order_id", "order_date", "net_amount").collectAsList();
