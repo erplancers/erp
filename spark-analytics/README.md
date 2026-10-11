@@ -11,6 +11,7 @@ Spark does not execute inside ordinary ERP CRUD HTTP requests. The current imple
 
 | Job type | Dataset key | What it produces |
 | --- | --- | --- |
+| `SALES_TREND_ANALYSIS` | `sales_orders` | Calendar-complete monthly revenue and order counts, average order value, month-over-month change/growth, trailing three-month average, and year-over-year growth |
 | `RFM` | `sales_orders` | Recency, frequency, monetary value and historical/annualized revenue measures |
 | `COHORT_ANALYSIS` | `sales_orders` | Cohort month × age-month retention counts |
 | `CUSTOMER_LIFETIME_VALUE` | `sales_orders` | Historical revenue and annualized observed revenue estimate; **not** a discounted predictive CLV |
@@ -139,6 +140,26 @@ All endpoints are under `/api/analytics` and follow the app's configured basic a
 - `POST /models/{name}/{version}/review?tenantId=...` — approve/reject candidate.
 - `POST /models/{name}/{version}/promote?tenantId=...` — promote a validated model.
 - `POST /models/{name}/{version}/rollback?tenantId=...` — reactivate a retired version.
+
+Example executive sales trend analysis (monthly calendar periods):
+
+```http
+POST /api/analytics/jobs
+Content-Type: application/json
+Authorization: Basic <your ERP credentials>
+```
+
+```json
+{
+  "tenantId": "tenant-a",
+  "datasetKey": "sales_orders",
+  "jobType": "SALES_TREND_ANALYSIS",
+  "idempotencyKey": "sales-trends-tenant-a-2026-10",
+  "parameters": {}
+}
+```
+
+The result is written as tenant-scoped Parquet under the protected artifact root. Missing calendar months between the first and last observed order month are emitted with zero revenue/orders; growth percentages are null when the comparison baseline is zero. Revenue is the sum of the configured `net_amount` alias, so normalize currencies and exclude cancelled/draft documents in the approved source view before running this report.
 
 Example RFM job:
 
