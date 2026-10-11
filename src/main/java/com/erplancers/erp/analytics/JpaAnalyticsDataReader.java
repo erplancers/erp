@@ -43,11 +43,9 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
     private static final int MAX_ROWS = 1_000_000;
 
     private final EntityManager entityManager;
-    private final SparkSessionProvider sparkProvider;
 
-    public JpaAnalyticsDataReader(EntityManager entityManager, SparkSessionProvider sparkProvider) {
+    public JpaAnalyticsDataReader(EntityManager entityManager) {
         this.entityManager = Objects.requireNonNull(entityManager);
-        this.sparkProvider = Objects.requireNonNull(sparkProvider);
     }
 
     @Override
@@ -171,9 +169,15 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
     private Path<?> scopePath(Root<?> root, EntityType<?> entityType, String name) {
         Path<?> path = attributePath(root, name);
         if (path.getModel() instanceof SingularAttribute<?, ?> attribute
-                && attribute.getPersistentAttributeType().name().matches("MANY_TO_ONE|ONE_TO_ONE")) {
+                && (attribute.getPersistentAttributeType().name().equals("MANY_TO_ONE")
+                || attribute.getPersistentAttributeType().name().equals("ONE_TO_ONE"))) {
             EntityType<?> related = entityManager.getMetamodel().entity(path.getJavaType());
-            String idName = related.getSingularAttributes().stream()\n                    .filter(SingularAttribute::isId)\n                    .map(SingularAttribute::getName)\n                    .findFirst().orElseThrow(() -> new IllegalArgumentException(\n                            "Scope relationship has no simple JPA identifier: " + name));
+            String idName = related.getSingularAttributes().stream()
+                    .filter(SingularAttribute::isId)
+                    .map(SingularAttribute::getName)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Scope relationship has no simple JPA identifier: " + name));
             return path.get(idName);
         }
         return path;
