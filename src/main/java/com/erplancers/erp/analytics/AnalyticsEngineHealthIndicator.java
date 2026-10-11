@@ -22,7 +22,7 @@ public class AnalyticsEngineHealthIndicator implements HealthIndicator {
             return Health.up().withDetail("engineState", state).build();
         }
         if ("FAILED".equals(state)) {
-            return Health.down().withDetail("engineState", state)
+            return Health.status(org.springframework.boot.actuate.health.Status.UNKNOWN).withDetail("engineState", state)
                     .withDetail("hint", "Check analytics catalogue, database grants, Spark startup and Kafka connectivity")
                     .build();
         }
