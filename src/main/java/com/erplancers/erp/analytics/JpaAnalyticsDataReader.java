@@ -180,13 +180,17 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
     }
 
     private Path<?> attributePath(Path<?> root, String name) {
-        if (name == null || !name.matches("[A-Za-z_][A-Za-z0-9_]{0,62}")) {
-            throw new IllegalArgumentException("Analytics projections must use approved JPA scalar attributes: " + name);
+        if (name == null || name.isBlank()
+                || java.util.Arrays.stream(name.split("[.]"))
+                    .anyMatch(part -> !part.matches("[A-Za-z_][A-Za-z0-9_]{0,62}"))) {
+            throw new IllegalArgumentException("Analytics projections must use approved JPA attribute paths: " + name);
         }
         try {
-            return root.get(name);
+            Path<?> path = root;
+            for (String part : name.split("[.]")) path = path.get(part);
+            return path;
         } catch (IllegalArgumentException invalidAttribute) {
-            throw new IllegalArgumentException("Unknown JPA attribute '" + name + "' on analytics entity", invalidAttribute);
+            throw new IllegalArgumentException("Unknown JPA attribute path '" + name + "' on analytics entity", invalidAttribute);
         }
     }
 
