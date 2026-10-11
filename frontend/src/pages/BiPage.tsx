@@ -16,6 +16,7 @@ import { Chart } from "primereact/chart";
 import { Tag } from "primereact/tag";
 import { useAuth } from "../auth";
 import { api } from "../api";
+import { BiWorkspacePanel } from "../components/BiWorkspacePanel";
 
 type FilterOperator = "eq" | "ne" | "like" | "gt" | "gte" | "lt" | "lte" | "isnull" | "notnull";
 type BiRow = Record<string, unknown>;
@@ -43,6 +44,39 @@ function downloadCsv(rows: BiRow[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function htmlCell(value: unknown): string {
+  const text = value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+function downloadExcel(rows: BiRow[], filename: string) {
+  if (!rows.length) return;
+  const headers = Array.from(new Set(rows.flatMap(row => Object.keys(row))));
+  const table = "<table><thead><tr>" + headers.map(h => "<th>" + htmlCell(h) + "</th>").join("")
+    + "</tr></thead><tbody>" + rows.map(row => "<tr>" + headers.map(h => "<td>" + htmlCell(row[h]) + "</td>").join("") + "</tr>").join("")
+    + "</tbody></table>";
+  const blob = new Blob(["<html><head><meta charset=\"utf-8\"></head><body>" + table + "</body></html>"],
+    { type: "application/vnd.ms-excel;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url; link.download = filename; document.body.appendChild(link); link.click(); link.remove();
+  URL.revokeObjectURL(url);
+}
+function printPdf(rows: BiRow[], title: string) {
+  if (!rows.length) return;
+  const target = window.open("", "_blank");
+  if (!target) return;
+  const headers = Array.from(new Set(rows.flatMap(row => Object.keys(row))));
+  const table = "<table><thead><tr>" + headers.map(h => "<th>" + htmlCell(h) + "</th>").join("")
+    + "</tr></thead><tbody>" + rows.map(row => "<tr>" + headers.map(h => "<td>" + htmlCell(row[h]) + "</td>").join("") + "</tr>").join("")
+    + "</tbody></table>";
+  target.document.write("<!doctype html><html><head><meta charset=\"utf-8\"><title>" + htmlCell(title)
+    + "</title><style>body{font:12px Arial;padding:20px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px;text-align:left;overflow-wrap:anywhere}th{background:#eee}h1{font-size:18px}</style></head><body><h1>"
+    + htmlCell(title) + "</h1>" + table + "</body></html>");
+  target.document.close();
+  target.focus();
+  target.print();
+}
+
 export function BiPage() {
   const { slug = "" } = useParams();
   const { credentials } = useAuth();
@@ -57,6 +91,7 @@ export function BiPage() {
   const [includeRank, setIncludeRank] = useState(true);
   const [includeShare, setIncludeShare] = useState(false);
   const [includeGrandTotal, setIncludeGrandTotal] = useState(true);
+  const [calculatedMeasures, setCalculatedMeasures] = useState<Record<string, string>>({});
   const [result, setResult] = useState<BiResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +129,7 @@ export function BiPage() {
     api.biQuery(slug, {
       dimensions, measures, filters, orderBy: orderBy || undefined,
       limit: Math.min(1000, Math.max(1, limit)), includeRank,
-      includeShareOfTotal: includeShare, includeGrandTotal
+      includeShareOfTotal: includeShare, includeGrandTotal, calculatedMeasures
     }, credentials)
       .then((data: BiResult) => setResult(data))
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "BI query failed"))
@@ -111,7 +146,7 @@ export function BiPage() {
   const chartLabels = chartRows.map(row => dimensions.map(dimension => String(row[dimension] ?? "Unknown")).join(" / "));
   const chartData = result ? {
     labels: chartLabels,
-    datasets: measures.map(measure => ({
+    datasets: [...measures, ...Object.keys(calculatedMeasures)].map(measure => ({
       label: measure,
       data: chartRows.map(row => { const value = row[measure]; return typeof value === "number" ? value : Number(value ?? 0); })
     }))
@@ -182,12 +217,27 @@ export function BiPage() {
           <Button label="Run analysis" icon="pi pi-play" onClick={runQuery} disabled={!dimensions.length || !measures.length} loading={loading} />
           <Button label="Reset" icon="pi pi-refresh" severity="secondary" outlined onClick={() => {
             setDimensions([]); setMeasures(["count"]); setFilters({}); setFilterField(""); setFilterValue(""); setFilterOperator("eq");
-            setOrderBy("count:desc"); setLimit(100); setIncludeRank(true); setIncludeShare(false); setIncludeGrandTotal(true); setResult(null); setError(null);
+            setOrderBy("count:desc"); setLimit(100); setIncludeRank(true); setIncludeShare(false); setIncludeGrandTotal(true); setCalculatedMeasures({}); setResult(null); setError(null);
           }} />
           <Button label="Export CSV" icon="pi pi-download" severity="success" outlined disabled={!rows.length}
             onClick={() => downloadCsv(rows, slug + "-bi-" + new Date().toISOString().slice(0, 10) + ".csv")} />
+          <Button label="Export Excel" icon="pi pi-file-excel" severity="success" outlined disabled={!rows.length}
+            onClick={() => downloadExcel(rows, slug + "-bi-" + new Date().toISOString().slice(0, 10) + ".xls")} />
+          <Button label="Print / Save PDF" icon="pi pi-file-pdf" severity="secondary" outlined disabled={!rows.length}
+            onClick={() => printPdf(rows, slug + " BI report")} />
         </div>
       </Card>
+      <BiWorkspacePanel
+        slug={slug}
+        credentials={credentials!}
+        query={{
+          dimensions, measures, filters, orderBy: orderBy || undefined,
+          limit: Math.min(1000, Math.max(1, limit)), includeRank,
+          includeShareOfTotal: includeShare, includeGrandTotal
+        }}
+        calculatedMeasures={calculatedMeasures}
+        onCalculatedMeasuresChange={setCalculatedMeasures}
+      />
       {error && <Message severity="error" text={error} className="mb-3" />}
       {result && <>
         <div className="flex flex-wrap gap-2 align-items-center mb-3">

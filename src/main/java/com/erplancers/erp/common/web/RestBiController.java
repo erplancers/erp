@@ -7,6 +7,11 @@ import com.erplancers.erp.common.reporting.JpaOlapCubeService;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +26,9 @@ public class RestBiController {
     private final OlapAnalysisEngine olap;
     private final JpaOlapCubeService jpaOlap;
     private final PolicyAuthorizationService authorization;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper mapper;
+    private final ConcurrentHashMap<String, CachedBiReport> queryCache = new ConcurrentHashMap<>();
 
     @PostMapping("/resources/{slug}/query")
     public ErpBiEngine.BiReport query(
@@ -28,8 +36,44 @@ public class RestBiController {
             @PathVariable String slug,
             @RequestBody ErpBiEngine.BiQuery request) {
         requireRead(authentication, slug);
-        return bi.query(slug, request);
+        long started = System.nanoTime();
+        String roles = authentication.getAuthorities().stream().map(a -> a.getAuthority()).sorted()
+                .collect(java.util.stream.Collectors.joining(","));
+        String queryJson;
+        try { queryJson = mapper.writeValueAsString(request); }
+        catch (Exception ex) { queryJson = request.toString(); }
+        String cacheKey = authentication.getName() + "|" + roles + "|" + slug + "|" + queryJson;
+        Instant now = Instant.now();
+        CachedBiReport cached = queryCache.get(cacheKey);
+        if (cached != null && cached.expiresAt().isAfter(now)) {
+            audit(authentication.getName(), slug, started, true, true);
+            return cached.report();
+        }
+        try {
+            ErpBiEngine.BiReport report = bi.query(slug, request);
+            if (queryCache.size() > 2000) queryCache.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
+            if (queryCache.size() > 2500) queryCache.clear();
+            queryCache.put(cacheKey, new CachedBiReport(report, now.plusSeconds(30)));
+            audit(authentication.getName(), slug, started, false, true);
+            return report;
+        } catch (RuntimeException ex) {
+            audit(authentication.getName(), slug, started, false, false);
+            throw ex;
+        }
     }
+
+    private void audit(String username, String slug, long startedNanos, boolean cacheHit, boolean succeeded) {
+        long elapsedMillis = Math.max(0, (System.nanoTime() - startedNanos) / 1_000_000);
+        try {
+            jdbc.update("INSERT INTO bi_query_audit (username, resource_slug, elapsed_ms, cache_hit, succeeded, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    username, slug, elapsedMillis, cacheHit, succeeded, Timestamp.from(Instant.now()));
+        } catch (RuntimeException ignored) {
+            // BI queries must remain available if optional telemetry storage is unavailable.
+        }
+    }
+
+    private record CachedBiReport(ErpBiEngine.BiReport report, Instant expiresAt) {}
+
 
     @PostMapping("/resources/{slug}/analyze")
     public AdvancedAnalyticsEngine.AdvancedAnalysis analyze(

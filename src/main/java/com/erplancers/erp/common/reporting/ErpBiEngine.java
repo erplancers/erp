@@ -77,6 +77,12 @@ public class ErpBiEngine {
                 grandTotalValue,
                 request.includeRank(),
                 request.includeShareOfTotal());
+        CalculatedMeasureEngine.apply(rows, request.calculatedMeasures());
+        if (!grandTotal.isEmpty() && request.calculatedMeasures() != null && !request.calculatedMeasures().isEmpty()) {
+            List<Map<String, Object>> totalRows = new ArrayList<>();
+            totalRows.add(grandTotal);
+            CalculatedMeasureEngine.apply(totalRows, request.calculatedMeasures());
+        }
 
         return new BiReport(
                 report.resource(),
@@ -157,7 +163,8 @@ public class ErpBiEngine {
             Integer limit,
             Boolean includeRank,
             Boolean includeShareOfTotal,
-            Boolean includeGrandTotal) {
+            Boolean includeGrandTotal,
+            Map<String, String> calculatedMeasures) {
 
         public BiQuery {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
@@ -168,6 +175,14 @@ public class ErpBiEngine {
             includeRank = Boolean.TRUE.equals(includeRank);
             includeShareOfTotal = Boolean.TRUE.equals(includeShareOfTotal);
             includeGrandTotal = Boolean.TRUE.equals(includeGrandTotal);
+            calculatedMeasures = calculatedMeasures == null ? Map.of() : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(calculatedMeasures));
+        }
+
+        public BiQuery(List<String> dimensions, List<String> measures, Map<String, String> filters,
+                       String orderBy, Integer limit, Boolean includeRank,
+                       Boolean includeShareOfTotal, Boolean includeGrandTotal) {
+            this(dimensions, measures, filters, orderBy, limit, includeRank,
+                    includeShareOfTotal, includeGrandTotal, Map.of());
         }
     }
 
