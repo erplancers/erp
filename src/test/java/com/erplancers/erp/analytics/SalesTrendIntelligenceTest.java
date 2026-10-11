@@ -10,6 +10,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Path;
 import java.sql.Date;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +22,11 @@ class SalesTrendIntelligenceTest {
 
     @BeforeAll
     static void startSpark() {
+        String metricsConfig = Path.of("src/test/resources/spark-metrics.properties")
+                .toAbsolutePath().toString();
+        System.setProperty("spark.metrics.conf", metricsConfig);
         spark = SparkSession.builder()
+                .config("spark.metrics.conf", metricsConfig)
                 .appName("sales-trend-intelligence-test")
                 .master("local[1]")
                 .config("spark.ui.enabled", "false")
@@ -39,6 +44,7 @@ class SalesTrendIntelligenceTest {
             spark.stop();
             spark = null;
         }
+        System.clearProperty("spark.metrics.conf");
     }
 
     @Test
