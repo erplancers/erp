@@ -1,6 +1,6 @@
 # ERP Business Intelligence and ML Platform
 
-The Spark SQL/MLlib engine is included as a Gradle project dependency of the main Spring Boot backend and runs in the same JVM on a managed lifecycle thread. Authenticated API endpoints enqueue jobs; the engine claims PostgreSQL-leased jobs in the background and writes artifacts/Parquet results to protected storage. Kafka notifications wake the engine promptly, with PostgreSQL polling as a fallback. The optional standalone worker entry point remains available for isolated development or deployment, but Docker Compose uses the embedded backend engine.
+The Spark SQL/MLlib engine is included as a Gradle project dependency of the main Spring Boot backend and runs in the same JVM on a managed lifecycle thread. Authenticated API endpoints enqueue jobs; the engine claims PostgreSQL-leased jobs in the background and writes artifacts/Parquet results to protected storage. Kafka notifications wake the engine promptly, with PostgreSQL polling as a fallback. All analytical source rows are selected through the ERP JPA EntityManager and Hibernate entity mappings. JPA is retained only for the durable analytics job/model metadata store; no standalone JDBC analytics-source worker is supported.
 
 Spark never executes on ordinary ERP CRUD HTTP request threads. The current implementation is a production-oriented foundation; it is not a substitute for staging, threat-model review, real-schema mapping, performance/load testing, and operational runbooks before a production rollout.
 
