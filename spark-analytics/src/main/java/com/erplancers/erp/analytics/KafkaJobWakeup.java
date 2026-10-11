@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Kafka is a low-latency wake-up channel; PostgreSQL remains the durable queue and
  * polling fallback. Broker downtime or duplicate delivery therefore cannot lose a job.
  */
-final class KafkaJobWakeup implements AutoCloseable {
+public final class KafkaJobWakeup implements AutoCloseable {
     private static final String DEFAULT_TOPIC = "erp.analytics.job.queued.v1";
     private final Semaphore signals = new Semaphore(0);
     private final AtomicBoolean running = new AtomicBoolean(true);
@@ -28,7 +28,7 @@ final class KafkaJobWakeup implements AutoCloseable {
         consumerThread.setDaemon(true);
         consumerThread.start();
     }
-    static KafkaJobWakeup fromEnvironment() {
+    public static KafkaJobWakeup fromEnvironment() {
         String bootstrap = System.getenv("KAFKA_BOOTSTRAP_SERVERS");
         if (bootstrap == null || bootstrap.isBlank()) return new KafkaJobWakeup();
         return new KafkaJobWakeup(bootstrap,
@@ -72,7 +72,7 @@ final class KafkaJobWakeup implements AutoCloseable {
             }
         }
     }
-    void await(long timeoutMillis) throws InterruptedException {
+    public void await(long timeoutMillis) throws InterruptedException {
         signals.tryAcquire(Math.max(1, timeoutMillis), java.util.concurrent.TimeUnit.MILLISECONDS);
     }
     @Override public void close() {
