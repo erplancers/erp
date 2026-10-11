@@ -18,6 +18,7 @@ repositories {
 
 
 dependencies {
+	implementation project(':spark-analytics')
 	// Source: https://mvnrepository.com/artifact/org.webjars/bootstrap
 	implementation 'org.webjars:bootstrap:5.3.8'
 	implementation 'org.springframework.kafka:spring-kafka'
