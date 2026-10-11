@@ -165,13 +165,13 @@ public class BiWorkspaceController {
         Long failures24h = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM bi_query_audit WHERE created_at >= ? AND succeeded = FALSE", Long.class,
                 Timestamp.from(Instant.now().minus(Duration.ofHours(24))));
-        Long oldestQueueSeconds = jdbc.queryForObject("""
-                SELECT COALESCE(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MIN(created_at)))::BIGINT, 0)
-                  FROM bi_report_execution WHERE status = 'QUEUED'
-                """, Long.class);
+        Timestamp oldestQueuedAt = jdbc.queryForObject(
+                "SELECT MIN(created_at) FROM bi_report_execution WHERE status = 'QUEUED'", Timestamp.class);
+        long oldestQueueSeconds = oldestQueuedAt == null ? 0
+                : Math.max(0, Duration.between(oldestQueuedAt.toInstant(), Instant.now()).getSeconds());
         counts.put("queriesLast24Hours", queries24h == null ? 0 : queries24h);
         counts.put("queryFailuresLast24Hours", failures24h == null ? 0 : failures24h);
-        counts.put("oldestQueuedExecutionSeconds", oldestQueueSeconds == null ? 0 : oldestQueueSeconds);
+        counts.put("oldestQueuedExecutionSeconds", oldestQueueSeconds);
         counts.put("savedReports", jdbc.queryForObject("SELECT COUNT(*) FROM bi_saved_report", Long.class));
         counts.put("scheduledReports", jdbc.queryForObject(
                 "SELECT COUNT(*) FROM bi_saved_report WHERE enabled = TRUE AND schedule_interval_minutes IS NOT NULL", Long.class));
