@@ -12,5 +12,4 @@ CREATE TABLE IF NOT EXISTS analytics_event_outbox (
     CONSTRAINT ck_analytics_outbox_attempts CHECK (attempts >= 0)
 );
 CREATE INDEX IF NOT EXISTS ix_analytics_outbox_pending
-    ON analytics_event_outbox(created_at)
-    WHERE published_at IS NULL;
+    ON analytics_event_outbox(published_at, created_at);
