@@ -50,9 +50,6 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
                     environment.getProperty("spring.datasource.username"));
             String metadataPassword = required("ANALYTICS_METADATA_PASSWORD",
                     environment.getProperty("spring.datasource.password"));
-            String readUrl = required("ANALYTICS_READ_JDBC_URL", metadataUrl);
-            String readUser = required("ANALYTICS_READ_USER", metadataUser);
-            String readPassword = required("ANALYTICS_READ_PASSWORD", metadataPassword);
             Path catalogFile = Path.of(required("ANALYTICS_DATASETS_CONFIG", "./deploy/analytics-datasets.properties"));
             String artifactUri = required("ANALYTICS_ARTIFACT_URI", "file:./var/erplancers/analytics");
             String workerId = required("ANALYTICS_WORKER_ID",
@@ -73,9 +70,8 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
                  KafkaJobWakeup wakeup = KafkaJobWakeup.fromEnvironment()) {
                 SparkSession spark = provider.session();
                 spark.sparkContext().setLogLevel(required("SPARK_LOG_LEVEL", "WARN"));
-                ScopedPostgresReader reader = new ScopedPostgresReader(spark, readUrl, readUser, readPassword);
                 AnalyticsJobWorker worker = new AnalyticsJobWorker(store,
-                        new SparkAnalyticsJobProcessor(catalog, reader, store, artifactUri),
+                        new SparkAnalyticsJobProcessor(catalog, analyticsSourceReader, store, artifactUri),
                         workerId, leaseSeconds, jobId -> spark.sparkContext().cancelJobGroup(jobId));
                 state = "RUNNING";
                 log.info("Embedded analytics engine ready; datasets={}, master={}, workerId={}",
