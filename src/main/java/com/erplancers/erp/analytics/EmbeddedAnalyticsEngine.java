@@ -13,8 +13,7 @@ import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Runs the Spark BI/ML engine in the ERP backend JVM on a managed lifecycle thread.
- * HTTP request threads only enqueue jobs; PostgreSQL leases remain the source of truth.
+ * Runs Spark BI/ML in the backend on a managed thread. JPA supplies business rows; PostgreSQL JDBC is used only for the durable job/model store.
  */
 @Component
 @ConditionalOnProperty(prefix = "analytics.engine", name = "enabled", havingValue = "true")
