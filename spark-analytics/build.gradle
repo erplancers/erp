@@ -1,14 +1,9 @@
 plugins {
     id 'java'
-    id 'application'
 }
 
 group = 'com.erplancers'
 version = '0.0.1-SNAPSHOT'
-
-application {
-    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
-}
 
 repositories {
     mavenCentral()
@@ -31,13 +26,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
     }
-}
-
-tasks.register('runWorker', JavaExec) {
-    group = 'application'
-    description = 'Run the standalone Spark analytics worker'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
 }
 
 tasks.named('test') {
