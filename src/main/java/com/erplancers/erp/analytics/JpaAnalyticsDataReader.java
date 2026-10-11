@@ -53,7 +53,7 @@ public class JpaAnalyticsDataReader implements AnalyticsSourceReader {
     public Dataset<Row> read(AnalyticsDatasetCatalog.DatasetDefinition definition,
                              AnalyticsJobStore.Job job) {
         verifyTenantAndScope(definition, job);
-        EntityType<?> entityType = entityType(definition.table());
+        EntityType<?> entityType = entityType(definition.entityName());
         Class<?> entityClass = entityType.getJavaType();
         CriteriaBuilder cb = entityManager.getCriteriaBuilder();
         CriteriaQuery<Object[]> query = cb.createQuery(Object[].class);
