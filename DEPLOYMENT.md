@@ -52,17 +52,17 @@ The broker is reachable from containers at kafka:29092 and from host tools at lo
 
 Spark SQL and Spark MLlib are now packaged as a Gradle dependency of the main Spring Boot backend and run in the same backend JVM on a managed lifecycle thread. HTTP requests only enqueue jobs; they never execute Spark work on request threads. The standalone `analytics-worker` Compose service has been removed. PostgreSQL leases still coordinate job claims, while Kafka topic `erp.analytics.job.queued.v1` wakes the embedded engine promptly; database polling remains the fallback.
 
-The engine is disabled by default. Configure an operator-approved catalogue and a separate least-privilege PostgreSQL read-only login before enabling it:
+The engine is disabled by default. Configure an operator-approved JPA entity/attribute catalogue and active tenant/scope grants before enabling it:
 
 ```sh
 cp deploy/analytics-datasets.properties.example deploy/analytics-datasets.properties
-# Edit the file: replace every YOUR_ placeholder with real approved views/columns.
-# In .env set ANALYTICS_ENGINE_ENABLED=true and configure ANALYTICS_READ_USER/PASSWORD.
+# Edit the file: replace every YOUR_ placeholder with registered JPA entity names and JPA attribute paths.
+# In .env set ANALYTICS_ENGINE_ENABLED=true after verifying tenant/scope grants.
 docker compose up -d --build
 docker compose logs -f backend
 ```
 
-The backend mounts `deploy/` read-only at `/run/config` and persists output under the `analytics_artifacts` volume. Do not enable the engine with placeholder mappings. For production, configure distinct least-privilege metadata/read-only PostgreSQL roles, protected secrets, private artifact storage, resource limits, and a multi-node secured Kafka deployment. Spark now shares backend JVM memory and CPU, so set container memory/CPU limits and monitor heap, GC, and job concurrency.
+The backend mounts `deploy/` read-only at `/run/config` and persists output under the `analytics_artifacts` volume. Analytical source rows are selected through the ERP JPA `EntityManager` and Hibernate mappings; the catalogue contains entity names and JPA attribute paths rather than physical SQL tables. The durable analytics job/model metadata store still uses the PostgreSQL job store, and Kafka is used for wake-up notifications. Do not enable the engine with placeholder mappings. The JPA extraction is paged and currently capped at one million rows per job; use approved aggregate/projection entities or bounded time windows for larger datasets. For production, protect secrets, scope grants, and artifacts, and use a secured multi-node Kafka deployment. Spark now shares backend JVM memory and CPU, so set container memory/CPU limits and monitor heap, GC, and job concurrency.
 
 
 ## Production notes

@@ -13,8 +13,7 @@ import java.sql.SQLException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Runs the Spark BI/ML engine in the ERP backend JVM on a managed lifecycle thread.
- * HTTP request threads only enqueue jobs; PostgreSQL leases remain the source of truth.
+ * Runs Spark BI/ML in the backend on a managed thread. JPA supplies business rows; PostgreSQL JDBC is used only for the durable job/model store.
  */
 @Component
 @ConditionalOnProperty(prefix = "analytics.engine", name = "enabled", havingValue = "true")
@@ -22,12 +21,14 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(EmbeddedAnalyticsEngine.class);
 
     private final Environment environment;
+    private final AnalyticsSourceReader analyticsSourceReader;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread engineThread;
     private volatile String state = "STOPPED";
 
-    public EmbeddedAnalyticsEngine(Environment environment) {
+    public EmbeddedAnalyticsEngine(Environment environment, AnalyticsSourceReader analyticsSourceReader) {
         this.environment = environment;
+        this.analyticsSourceReader = analyticsSourceReader;
     }
 
     @Override
@@ -48,9 +49,6 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
                     environment.getProperty("spring.datasource.username"));
             String metadataPassword = required("ANALYTICS_METADATA_PASSWORD",
                     environment.getProperty("spring.datasource.password"));
-            String readUrl = required("ANALYTICS_READ_JDBC_URL", metadataUrl);
-            String readUser = required("ANALYTICS_READ_USER", metadataUser);
-            String readPassword = required("ANALYTICS_READ_PASSWORD", metadataPassword);
             Path catalogFile = Path.of(required("ANALYTICS_DATASETS_CONFIG", "./deploy/analytics-datasets.properties"));
             String artifactUri = required("ANALYTICS_ARTIFACT_URI", "file:./var/erplancers/analytics");
             String workerId = required("ANALYTICS_WORKER_ID",
@@ -71,9 +69,8 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
                  KafkaJobWakeup wakeup = KafkaJobWakeup.fromEnvironment()) {
                 SparkSession spark = provider.session();
                 spark.sparkContext().setLogLevel(required("SPARK_LOG_LEVEL", "WARN"));
-                ScopedPostgresReader reader = new ScopedPostgresReader(spark, readUrl, readUser, readPassword);
                 AnalyticsJobWorker worker = new AnalyticsJobWorker(store,
-                        new SparkAnalyticsJobProcessor(catalog, reader, store, artifactUri),
+                        new SparkAnalyticsJobProcessor(catalog, analyticsSourceReader, store, artifactUri),
                         workerId, leaseSeconds, jobId -> spark.sparkContext().cancelJobGroup(jobId));
                 state = "RUNNING";
                 log.info("Embedded analytics engine ready; datasets={}, master={}, workerId={}",

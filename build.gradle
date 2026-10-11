@@ -16,6 +16,21 @@ repositories {
 	mavenCentral()
 }
 
+// Keep Spring Boot's Logback logging backend as the sole SLF4J provider.
+// Spark's log4j-slf4j2-impl conflicts with Boot's log4j-to-slf4j bridge.
+configurations.configureEach {
+	exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
+}
+
+// Resolve the LZ4 capability conflict for the root application's test/runtime
+// classpaths as well as the Spark module's own configurations.
+configurations.configureEach {
+	resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+		select('at.yawk.lz4:lz4-java:1.10.1')
+		because 'Kafka 4.x requires the newer LZ4 provider used by at.yawk.lz4'
+	}
+}
+
 
 dependencies {
 	implementation project(':spark-analytics')
@@ -23,6 +38,7 @@ dependencies {
 	implementation 'org.webjars:bootstrap:5.3.8'
 	implementation 'org.springframework.kafka:spring-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	implementation 'org.springframework.boot:spring-boot-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-batch'
 	implementation 'org.springframework.boot:spring-boot-starter-batch-jdbc'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'

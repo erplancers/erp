@@ -7,16 +7,17 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
 
-/** Loads an operator-managed source allowlist; no submitted job can change physical SQL sources. */
+/** Loads an operator-managed allowlist of JPA entities and mapped attributes. */
 public final class AnalyticsDatasetCatalog {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}");
-    private static final Pattern TABLE = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}(\\.[A-Za-z_][A-Za-z0-9_]{0,62})?");
+    private static final Pattern ENTITY_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}(\\.[A-Za-z_][A-Za-z0-9_]{0,62})?");
     private final Map<String, DatasetDefinition> definitions;
 
     public record Projection(String sourceColumn, String logicalAlias) {}
-    public record DatasetDefinition(String key, String table, List<Projection> projections,
+    public record DatasetDefinition(String key, String entityName, List<Projection> projections,
                                     String tenantColumn, String scopeColumn, String scopeType) {
         public DatasetDefinition { projections = List.copyOf(projections); }
+        public String table() { return entityName; }
         public Set<String> logicalColumns() {
             Set<String> names = new HashSet<>();
             projections.forEach(p -> names.add(p.logicalAlias()));
@@ -34,22 +35,24 @@ public final class AnalyticsDatasetCatalog {
         Set<String> keys = new TreeSet<>();
         String prefix = "analytics.datasets.";
         for (String name : properties.stringPropertyNames()) {
-            if (name.startsWith(prefix) && name.endsWith(".table")) {
-                keys.add(name.substring(prefix.length(), name.length() - ".table".length()));
+            if (name.startsWith(prefix) && (name.endsWith(".entity") || name.endsWith(".table"))) {
+                keys.add(name.substring(prefix.length(), name.lastIndexOf('.')));
             }
         }
         if (keys.isEmpty()) throw new IllegalArgumentException("No analytics dataset definitions configured");
         Map<String, DatasetDefinition> result = new HashMap<>();
         for (String key : keys) {
             String base = prefix + key + ".";
-            String table = required(properties, base + "table");
+            String table = properties.getProperty(base + "entity");
+            if (table == null || table.isBlank()) table = required(properties, base + "table");
+            else table = required(properties, base + "entity");
             String sourceColumns = required(properties, base + "columns");
             String tenantColumn = required(properties, base + "tenant-column");
             String scopeColumn = required(properties, base + "scope-column");
             String scopeType = required(properties, base + "scope-type").toUpperCase(Locale.ROOT);
-            if (!TABLE.matcher(table).matches()) throw new IllegalArgumentException("Unsafe table identifier for " + key);
-            validateIdentifier(tenantColumn, "tenantColumn");
-            validateIdentifier(scopeColumn, "scopeColumn");
+            if (!ENTITY_NAME.matcher(table).matches()) throw new IllegalArgumentException("Unsafe JPA entity name for " + key);
+            validatePath(tenantColumn, "tenantColumn");
+            validatePath(scopeColumn, "scopeColumn");
             if (!Set.of("CONTACT", "WAREHOUSE", "COST_CENTER").contains(scopeType)) {
                 throw new IllegalArgumentException("Unsupported scope type for " + key + ": " + scopeType);
             }
@@ -58,7 +61,7 @@ public final class AnalyticsDatasetCatalog {
             for (String item : sourceColumns.split(",")) {
                 String[] pieces = item.trim().split(":", -1);
                 if (pieces.length != 2) throw new IllegalArgumentException("Column mapping must be source:alias in " + key);
-                validateIdentifier(pieces[0], "source column");
+                validatePath(pieces[0], "source attribute");
                 validateIdentifier(pieces[1], "logical alias");
                 if (!aliases.add(pieces[1])) throw new IllegalArgumentException("Duplicate logical alias: " + pieces[1]);
                 projections.add(new Projection(pieces[0], pieces[1]));
@@ -91,5 +94,12 @@ public final class AnalyticsDatasetCatalog {
 
     private static void validateIdentifier(String value, String name) {
         if (!IDENTIFIER.matcher(value).matches()) throw new IllegalArgumentException("Unsafe " + name + ": " + value);
+    }
+
+    private static void validatePath(String value, String name) {
+        if (value == null || value.isBlank()
+                || Arrays.stream(value.split("[.]")).anyMatch(part -> !IDENTIFIER.matcher(part).matches())) {
+            throw new IllegalArgumentException("Unsafe " + name + ": " + value);
+        }
     }
 }

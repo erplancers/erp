@@ -1,7 +1,7 @@
 package com.erplancers.erp.analytics;
 
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.health.contributor.Health;
+import org.springframework.boot.health.contributor.HealthIndicator;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -22,7 +22,7 @@ public class AnalyticsEngineHealthIndicator implements HealthIndicator {
             return Health.up().withDetail("engineState", state).build();
         }
         if ("FAILED".equals(state)) {
-            return Health.status(org.springframework.boot.actuate.health.Status.UNKNOWN).withDetail("engineState", state)
+            return Health.status(org.springframework.boot.health.contributor.Status.UNKNOWN).withDetail("engineState", state)
                     .withDetail("hint", "Check analytics catalogue, database grants, Spark startup and Kafka connectivity")
                     .build();
         }

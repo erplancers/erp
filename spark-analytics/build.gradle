@@ -1,22 +1,32 @@
 plugins {
-    id 'java'
-    id 'application'
+    id 'java-library'
 }
 
 group = 'com.erplancers'
 version = '0.0.1-SNAPSHOT'
 
-application {
-    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
-}
-
 repositories {
     mavenCentral()
 }
 
+// Spring Boot uses Logback and routes Log4j through log4j-to-slf4j.
+// Do not also load Log4j's reverse SLF4J provider from Spark/Hadoop.
+configurations.configureEach {
+    exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
+}
+
+// Kafka 4.x and transitive Hadoop/Spark dependencies can expose two providers
+// of the same LZ4 capability. Prefer the versioned fork requested by Kafka.
+configurations.configureEach {
+    resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+        select('at.yawk.lz4:lz4-java:1.10.1')
+        because 'Avoid selecting the older org.lz4:lz4-java provider alongside Kafka 4.x'
+    }
+}
+
 dependencies {
-    implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
-    implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
+    api 'org.apache.spark:spark-sql_2.13:4.0.1'
+    api 'org.apache.spark:spark-mllib_2.13:4.0.1'
     implementation 'org.postgresql:postgresql:42.7.7'
     implementation 'org.apache.kafka:kafka-clients:4.1.0'
     // Filesystem connectors used by protected HDFS/S3-compatible/Azure artifact stores.
@@ -31,13 +41,6 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(17)
     }
-}
-
-tasks.register('runWorker', JavaExec) {
-    group = 'application'
-    description = 'Run the standalone Spark analytics worker'
-    classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.erplancers.erp.analytics.SparkAnalyticsWorkerMain'
 }
 
 tasks.named('test') {

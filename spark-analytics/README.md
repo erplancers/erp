@@ -1,6 +1,6 @@
 # ERP Business Intelligence and ML Platform
 
-The Spark SQL/MLlib engine is included as a Gradle project dependency of the main Spring Boot backend and runs in the same JVM on a managed lifecycle thread. Authenticated API endpoints enqueue jobs; the engine claims PostgreSQL-leased jobs in the background and writes artifacts/Parquet results to protected storage. Kafka notifications wake the engine promptly, with PostgreSQL polling as a fallback. The optional standalone worker entry point remains available for isolated development or deployment, but Docker Compose uses the embedded backend engine.
+The Spark SQL/MLlib engine is included as a Gradle project dependency of the main Spring Boot backend and runs in the same JVM on a managed lifecycle thread. Authenticated API endpoints enqueue jobs; the engine claims PostgreSQL-leased jobs in the background and writes artifacts/Parquet results to protected storage. Kafka notifications wake the engine promptly, with PostgreSQL polling as a fallback. All analytical source rows are selected through the ERP JPA EntityManager and Hibernate entity mappings. JDBC is retained only for the durable analytics job/model metadata store; no standalone JDBC analytics-source worker is supported.
 
 Spark never executes on ordinary ERP CRUD HTTP request threads. The current implementation is a production-oriented foundation; it is not a substitute for staging, threat-model review, real-schema mapping, performance/load testing, and operational runbooks before a production rollout.
 
@@ -73,10 +73,10 @@ Do not grant model lifecycle actions to ordinary report users.
 
 ## PostgreSQL roles and least privilege
 
-Use different credentials for the metadata/control plane and the row-extraction worker:
+The embedded engine shares the application's JPA EntityManager for source data; JDBC credentials below are only for the durable metadata/control plane:
 
 1. `ANALYTICS_METADATA_USER` needs the limited INSERT/UPDATE/SELECT permissions required on analytics metadata tables. It is not the source-data extraction account.
-2. `ANALYTICS_READ_USER` must be a read-only account. Grant `SELECT` only on approved views and read access to `analytics_tenant_grant` and `analytics_scope_grant`; do not grant write access to ERP tables. The worker sets each Spark JDBC session to read-only.
+2. Configure valid JPA entity names and attribute paths in the dataset catalogue. The embedded reader uses the application's EntityManager and filters rows by active tenant/scope grants; never allow API requests to choose entity names or attribute paths.
 3. Network rules should allow the worker to reach PostgreSQL and the protected artifact store only. Do not expose Spark master, driver or Spark UI ports publicly.
 4. Use a dedicated secret manager in deployment; never commit passwords or filled-in production dataset configuration to this repository. For S3A/ABFS, configure workload identity/credential providers and endpoint settings through protected Hadoop configuration; do not hard-code cloud secrets in code or the example properties.
 
@@ -84,7 +84,7 @@ The metadata schema migration shown here creates tables; it does **not** create 
 
 ## Configure the worker
 
-Copy `src/main/resources/analytics-datasets.example.properties` to a protected deployment location and change every `YOUR_...` placeholder to approved source views and columns. The catalogue rejects placeholders and unsafe SQL identifiers. Aliases must match the logical columns used in each job. All source tables and projections are fixed by the operator-managed catalogue; API callers cannot pass SQL or physical table names.
+Copy `deploy/analytics-datasets.properties.example` to `deploy/analytics-datasets.properties` and change every `YOUR_...` placeholder to registered JPA entity names and mapped attribute paths. The catalogue rejects placeholders and unsafe attribute paths. Aliases must match the logical columns used in each job. API callers cannot pass entity names, attribute paths, or SQL.
 
 Available environment variables:
 
@@ -93,8 +93,7 @@ Available environment variables:
 | `ANALYTICS_ENGINE_ENABLED` | Enable the embedded engine in the backend; default `false` until real mappings and DB grants are configured |
 | `ANALYTICS_METADATA_JDBC_URL` | PostgreSQL URL for analytics metadata/job queue |
 | `ANALYTICS_METADATA_USER`, `ANALYTICS_METADATA_PASSWORD` | Metadata DB credentials |
-| `ANALYTICS_READ_JDBC_URL` | PostgreSQL URL for approved source views and grants |
-| `ANALYTICS_READ_USER`, `ANALYTICS_READ_PASSWORD` | Read-only extraction credentials |
+| `ANALYTICS_DATASETS_CONFIG` | Protected file containing JPA entity/attribute allowlist |
 | `ANALYTICS_DATASETS_CONFIG` | Path to the protected, operator-managed source catalogue |
 | `ANALYTICS_ARTIFACT_URI` | Protected URI root; supported schemes `file:`, `hdfs:`, `s3a:`, `abfs:`; cloud connectors are bundled |
 | `SPARK_MASTER` | Spark master URL, default `local[*]`; set cluster master in production |
@@ -105,7 +104,7 @@ Available environment variables:
 | `ANALYTICS_JOB_LEASE_SECONDS` | Lease duration (60–7200), default 900 |
 | `ANALYTICS_DRIFT_CRON` | Optional; app scheduler property `analytics.drift.cron`, default daily 02:30 UTC |
 
-For the default Docker Compose deployment, configure `deploy/analytics-datasets.properties`, set `ANALYTICS_ENGINE_ENABLED=true` in `.env`, and recreate the backend. See [deployment instructions](../DEPLOYMENT.md). The standalone development entry point can still be run with `./gradlew :spark-analytics:runWorker --no-daemon`, but it must have all `ANALYTICS_*` environment variables set. Embedded mode shares the backend's CPU and memory; enforce container limits and monitor Spark heap/GC and job concurrency.
+For the default Docker Compose deployment, configure `deploy/analytics-datasets.properties`, set `ANALYTICS_ENGINE_ENABLED=true` in `.env`, and recreate the backend. See [deployment instructions](../DEPLOYMENT.md). The supported analytics execution path is the embedded backend engine. The JPA extractor pages results and enforces a one-million-row cap per job; use bounded date windows or approved aggregate/projection entities for larger workloads. Embedded mode shares the backend's CPU and memory; enforce container limits and monitor Spark heap/GC and job concurrency.
 
 ### Source aliases required by built-in jobs
 
@@ -117,7 +116,7 @@ For the default Docker Compose deployment, configure `deploy/analytics-datasets.
 
 `receivables`: `customer_id`, `invoice_id`, `due_date`, `paid_date`, `invoice_amount`, `overdue_label`; the time-split risk model uses `due_date` as decision-date cutoff. Feature columns must be values known at that decision time, not post-outcome fields. Prefer leakage-reviewed features such as invoice amount, terms and strictly historical payment behavior.
 
-The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. The inventory template includes optional `recent_demand`, `on_hand`, `lead_time_days`, and `stockout_label` fields for supervised stock-out training. The receivables template includes leakage-reviewed aliases for historical overdue rate, payment delay and payment terms. Build approved SQL views in staging and confirm all aliases, historical labels, joins, currencies, deleted records and document lifecycle statuses before use.
+The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. The inventory template includes optional `recent_demand`, `on_hand`, `lead_time_days`, and `stockout_label` fields for supervised stock-out training. The receivables template includes leakage-reviewed aliases for historical overdue rate, payment delay and payment terms. Verify entity relations, aliases, historical labels, currencies, deleted records and document lifecycle statuses before use.
 
 ## API overview
 
@@ -209,12 +208,12 @@ These payloads require actual grants, configured policy rules, and source aliase
 
 - **Idempotency/retries:** the DB unique key and queue leases prevent duplicate claims; transient failures retry with bounded exponential delay. Verify database time and lease behavior under process kill/restart.
 - **Artifact isolation:** outputs are tenant/job scoped; deploy with private storage, encryption at rest, retention, backups, and per-tenant access policies. The metadata API should not hand out arbitrary file URIs to browsers.
-- **Data access:** filtering is evaluated in PostgreSQL at worker execution time. Each job materializes its scoped JDBC result once in worker-local disk cache so repeated Spark actions use the same extract; the cache is released after the job. The source rows are not retained as a durable snapshot. Lineage retains the source mapping, extraction time and scope fingerprint; for stronger long-term reproducibility, feed immutable database snapshots or versioned views into the platform.
+- **Data access:** source selection uses JPA entity mappings and Criteria API queries inside the ERP application transaction. Each job materializes its scoped result into Spark memory/disk cache; the cache is released after the job. Lineage retains the JPA entity mapping, extraction time and scope fingerprint; large workloads should use bounded windows or pre-aggregated JPA projection entities.
 - **Mapping integrity:** model manifests bind the source table, selected source-column aliases, tenant column, scope column/type and active scope grant fingerprint. Scoring/drift jobs fail closed if any of them differ from the training mapping. Model and drift metadata is scoped to its creator unless a separately authorized model operator accesses it.
 - **Auditability:** experiment inputs, model manifests, metrics, reviewers and model lifecycle events are persisted. Protect database backups and restrict direct metadata-table writes.
 - **Monitoring:** scrape application/worker metrics and logs externally; alert on queue age, retries, dead jobs, lease loss, Spark failures, model quality and PSI alerts. PSI measurements are available via the drift API.
 - **Data lineage:** manifests record tenant/model/job/dataset, parameters, Spark version, input-source reference, scope fingerprint, output URI, and metrics. Pin source snapshot/view version and artifact checksums in a mature production deployment.
-- **Capacity:** set max parallel jobs per tenant and total worker concurrency; monitor PostgreSQL load. Use table/view indexes on tenant and scope keys. Partition very large extracts or use immutable snapshots/CDC if repeated scans hurt the OLTP database.
+- **Capacity:** set max parallel jobs per tenant and total worker concurrency; monitor PostgreSQL load and backend heap/GC. Index the underlying columns used by JPA scope paths. Partition very large extracts or use pre-aggregated entities if repeated scans hurt the OLTP database.
 - **Backups/DR:** back up metadata tables and artifact stores together, test restore and model rollback. Avoid overwrite of previously promoted production model artifact paths.
 - **Privacy/fairness:** minimise or pseudonymise customer features, define purpose and retention, test error rates across permitted segments, and require human review for financial/credit-related decisions.
 - **Tests/release:** exercise migration on a staging PostgreSQL, run end-to-end tenant-isolation tests with separate users and grants, test row revocation during queued/running work, load-test large Spark jobs, and restore a prior production model before merge/release.
