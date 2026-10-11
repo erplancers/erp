@@ -44,7 +44,7 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         rawSource.sparkSession().sparkContext().setJobGroup(job.id(), "ERP analytics " + job.jobType(), true);
         Dataset<Row> source = rawSource.persist(org.apache.spark.storage.StorageLevel.DISK_ONLY());
         try {
-        // Materialize the scoped JDBC result once so subsequent Spark actions share one extract.
+        // Materialize the scoped JPA extract once so subsequent Spark actions share one extract.
         long sourceRows = source.count();
         String output = artifactRoot + "/" + safeSegment(job.tenantId()) + "/" + job.id()
                 + "/attempt-" + job.attemptCount();
