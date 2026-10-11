@@ -11,6 +11,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.*;
@@ -27,6 +29,9 @@ class RestAnalyticsControllerMockMvcTest {
     @Autowired ErpUserRepository users;
     @Autowired ErpAccessRuleRepository policies;
     @Autowired PasswordEncoder passwordEncoder;
+
+    // The web integration tests must not require a live Kafka producer configuration.
+    @MockitoBean KafkaTemplate<String, String> kafkaTemplate;
 
     @BeforeEach
     void setUp() {
