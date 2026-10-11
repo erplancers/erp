@@ -9,6 +9,12 @@ repositories {
     mavenCentral()
 }
 
+// Spring Boot uses Logback and routes Log4j through log4j-to-slf4j.
+// Do not also load Log4j's reverse SLF4J provider from Spark/Hadoop.
+configurations.configureEach {
+    exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
+}
+
 // Kafka 4.x and transitive Hadoop/Spark dependencies can expose two providers
 // of the same LZ4 capability. Prefer the versioned fork requested by Kafka.
 configurations.configureEach {
