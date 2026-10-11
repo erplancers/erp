@@ -5,6 +5,8 @@ import com.erplancers.erp.common.security.domain.ErpPolicy;
 import com.erplancers.erp.common.security.domain.ErpUser;
 import com.erplancers.erp.common.security.repository.ErpAccessRuleRepository;
 import com.erplancers.erp.common.security.repository.ErpUserRepository;
+import com.erplancers.erp.finance.domain.PaymentTransaction;
+import com.erplancers.erp.finance.repository.PaymentTransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,9 +31,14 @@ class ApiSecurityIntegrationTest {
     @Autowired ErpAccessRuleRepository policies;
     @Autowired PasswordEncoder passwordEncoder;
     @Autowired ErpBiEngine bi;
+    @Autowired PaymentTransactionRepository paymentTransactions;
 
     @BeforeEach
     void setUp() {
+        paymentTransactions.deleteAll();
+        paymentTransactions.save(paymentTransaction("SETTLED", 100L));
+        paymentTransactions.save(paymentTransaction("SETTLED", 250L));
+        paymentTransactions.save(paymentTransaction("PENDING", 50L));
         policies.deleteAll();
         users.deleteAll();
         users.save(user("admin", "admin-pass", "ADMIN", "ADMIN"));
@@ -140,11 +147,14 @@ class ApiSecurityIntegrationTest {
                                   "limit": 100
                                 }
                                 """))
-                .andDo(result -> System.err.println("BI HTTP RESPONSE: " + result.getResponse().getStatus() + " " + result.getResponse().getContentAsString()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resource", is("payment-transaction")))
+                .andExpect(jsonPath("$.module", is("finance")))
                 .andExpect(jsonPath("$.measures", hasItems("count", "sum:amount")))
-                .andExpect(jsonPath("$.rows", notNullValue()));
+                .andExpect(jsonPath("$.rowCount", is(2)))
+                .andExpect(jsonPath("$.rows[0].status", is("SETTLED")))
+                .andExpect(jsonPath("$.rows[0].count", is(2)))
+                .andExpect(jsonPath("$.rows[0].sum:amount", is(350)));
     }
 
     @Test void adminCanRunBiAnalyze() throws Exception {
@@ -431,6 +441,14 @@ class ApiSecurityIntegrationTest {
     @Test void reportsFollowPolicyAuthorization() throws Exception {
         mvc.perform(get("/api/reports/resources/invoice").with(httpBasic("readonly", "readonly-pass")))
                 .andExpect(status().isForbidden());
+    }
+
+    private PaymentTransaction paymentTransaction(String status, Long amount) {
+        PaymentTransaction transaction = new PaymentTransaction();
+        transaction.setStatus(status);
+        transaction.setAmount(amount);
+        transaction.setQuantity(1L);
+        return transaction;
     }
 
     private ErpUser user(String username, String password, String level, String role) {
