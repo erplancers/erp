@@ -25,7 +25,10 @@ class SalesTrendIntelligenceTest {
         // jakarta.servlet.SingleThreadModel, which Spring Boot 4's Servlet API no longer has.
         System.setProperty("spark.metrics.conf",
                 Path.of("src/test/resources/spark-metrics.properties").toAbsolutePath().toString());
+        String metricsConfig = Path.of("src/test/resources/spark-metrics.properties")
+                .toAbsolutePath().toString();
         spark = SparkSession.builder()
+                .config("spark.metrics.conf", metricsConfig)
                 .appName("sales-trend-intelligence-test")
                 .master("local[1]")
                 .config("spark.ui.enabled", "false")
