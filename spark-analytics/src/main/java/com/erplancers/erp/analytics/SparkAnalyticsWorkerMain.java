@@ -31,7 +31,8 @@ public final class SparkAnalyticsWorkerMain {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> running.set(false), "analytics-worker-shutdown"));
 
         String master = System.getenv().getOrDefault("SPARK_MASTER", "local[*]");
-        try (SparkSessionProvider provider = new SparkSessionProvider("erplancers-analytics-" + workerId, master)) {
+        try (SparkSessionProvider provider = new SparkSessionProvider("erplancers-analytics-" + workerId, master);
+             KafkaJobWakeup wakeup = KafkaJobWakeup.fromEnvironment()) {
             SparkSession spark = provider.session();
             spark.sparkContext().setLogLevel(System.getenv().getOrDefault("SPARK_LOG_LEVEL", "WARN"));
             ScopedPostgresReader reader = new ScopedPostgresReader(spark, readUrl, readUser, readPassword);
@@ -40,7 +41,7 @@ public final class SparkAnalyticsWorkerMain {
                     jobId -> spark.sparkContext().cancelJobGroup(jobId));
             while (running.get()) {
                 try {
-                    if (!worker.runOne()) Thread.sleep(idleMs);
+                    if (!worker.runOne()) wakeup.await(idleMs);
                 } catch (SQLException databaseError) {
                     System.err.println("Analytics queue database error: " + databaseError.getMessage());
                     Thread.sleep(Math.min(idleMs * 5L, 30_000L));
