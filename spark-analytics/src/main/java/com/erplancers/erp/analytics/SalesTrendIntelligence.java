@@ -34,10 +34,15 @@ public final class SalesTrendIntelligence {
                 min(col("_month")).alias("first_month"),
                 max(col("_month")).alias("last_month"));
 
+        // Generate integer month offsets, then add them to the first month. This avoids
+        // Spark-version differences in sequence(date, date, year-month interval) analysis.
         Dataset<Row> calendar = bounds
                 .filter(col("first_month").isNotNull())
-                .select(explode(sequence(col("first_month"), col("last_month"),
-                        expr("INTERVAL 1 MONTH"))).alias("month"));
+                .select(col("first_month"),
+                        explode(sequence(lit(0), months_between(
+                                col("last_month"), col("first_month")).cast("int")))
+                                .alias("_month_offset"))
+                .select(add_months(col("first_month"), col("_month_offset")).alias("month"));
 
         Dataset<Row> complete = calendar.join(monthly,
                         calendar.col("month").equalTo(monthly.col("_month")), "left")
