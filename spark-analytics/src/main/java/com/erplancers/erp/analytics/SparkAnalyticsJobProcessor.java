@@ -60,6 +60,18 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String outputPath = output + "/unassigned";
 
         switch (job.jobType()) {
+            case "SALES_TREND_ANALYSIS" -> {
+                Dataset<Row> result = SalesTrendIntelligence.monthlyTrends(
+                        source, "order_id", "order_date", "net_amount");
+                outputPath = write(result, output + "/sales-trends");
+                metrics.put("periods", result.count());
+                metrics.put("outputPath", outputPath);
+                metrics.put("measures", List.of("revenue", "order_count", "average_order_value",
+                        "mom_change", "mom_growth_pct", "trailing_3_month_avg_revenue",
+                        "prior_year_revenue", "yoy_growth_pct"));
+                metrics.put("calendarPolicy", "missing months are zero-filled; growth is null when comparison baseline is zero");
+                algorithm = "calendar-aware-monthly-sales-trends";
+            }
             case "RFM" -> {
                 Dataset<Row> result = SalesIntelligence.rfm(source, "customer_id", "order_id",
                         "order_date", "net_amount", dateParameter(p, "asOfDate"));
