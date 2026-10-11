@@ -102,6 +102,8 @@ Available environment variables:
 | `SPARK_MASTER` | Spark master URL, default `local[*]`; set cluster master in production |
 | `ANALYTICS_WORKER_ID` | Optional unique worker identifier |
 | `ANALYTICS_IDLE_POLL_MS` | Queue idle sleep (250–60000), default 1000 |
+| `KAFKA_BOOTSTRAP_SERVERS` | Optional Kafka brokers for queue wake-up events; blank disables Kafka and uses PostgreSQL polling only |
+| `KAFKA_ANALYTICS_JOB_TOPIC` | Optional wake-up topic; default `erp.analytics.job.queued.v1` |
 | `ANALYTICS_JOB_LEASE_SECONDS` | Lease duration (60–7200), default 900 |
 | `ANALYTICS_DRIFT_CRON` | Optional; app scheduler property `analytics.drift.cron`, default daily 02:30 UTC |
 
@@ -159,7 +161,7 @@ Authorization: Basic <your ERP credentials>
 }
 ```
 
-The result is written as tenant-scoped Parquet under the protected artifact root. Missing calendar months between the first and last observed order month are emitted with zero revenue/orders; growth percentages are null when the comparison baseline is zero. Revenue is the sum of the configured `net_amount` alias, so normalize currencies and exclude cancelled/draft documents in the approved source view before running this report.
+The ERP writes a versioned erp.analytics.job.queued.v1 notification to Kafka through a PostgreSQL transactional outbox. The Spark worker consumes notifications as low-latency wake-ups, then claims authoritative job rows with PostgreSQL leases. If Kafka is unavailable, the worker continues polling PostgreSQL; duplicate Kafka delivery is safe because the database queue owns job state. The outbox is at-least-once, so consumers must be idempotent. Job status/results remain visible through the ERP API and shared analytics metadata database. The result is written as tenant-scoped Parquet under the protected artifact root. Missing calendar months between the first and last observed order month are emitted with zero revenue/orders; growth percentages are null when the comparison baseline is zero. Revenue is the sum of the configured `net_amount` alias, so normalize currencies and exclude cancelled/draft documents in the approved source view before running this report.
 
 Example RFM job:
 
