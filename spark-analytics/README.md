@@ -73,7 +73,7 @@ Do not grant model lifecycle actions to ordinary report users.
 
 ## PostgreSQL roles and least privilege
 
-Use different credentials for the metadata/control plane and the row-extraction worker:
+The embedded engine shares the application's JPA EntityManager for source data; JDBC credentials below are only for the durable metadata/control plane:
 
 1. `ANALYTICS_METADATA_USER` needs the limited INSERT/UPDATE/SELECT permissions required on analytics metadata tables. It is not the source-data extraction account.
 2. Configure valid JPA entity names and attribute paths in the dataset catalogue. The embedded reader uses the application's EntityManager and filters rows by active tenant/scope grants; never allow API requests to choose entity names or attribute paths.
@@ -84,7 +84,7 @@ The metadata schema migration shown here creates tables; it does **not** create 
 
 ## Configure the worker
 
-Copy `src/main/resources/analytics-datasets.example.properties` to a protected deployment location and change every `YOUR_...` placeholder to approved source views and columns. The catalogue rejects placeholders and unsafe SQL identifiers. Aliases must match the logical columns used in each job. All source tables and projections are fixed by the operator-managed catalogue; API callers cannot pass SQL or physical table names.
+Copy `deploy/analytics-datasets.properties.example` to `deploy/analytics-datasets.properties` and change every `YOUR_...` placeholder to registered JPA entity names and mapped attribute paths. The catalogue rejects placeholders and unsafe attribute paths. Aliases must match the logical columns used in each job. API callers cannot pass entity names, attribute paths, or SQL.
 
 Available environment variables:
 
@@ -117,7 +117,7 @@ For the default Docker Compose deployment, configure `deploy/analytics-datasets.
 
 `receivables`: `customer_id`, `invoice_id`, `due_date`, `paid_date`, `invoice_amount`, `overdue_label`; the time-split risk model uses `due_date` as decision-date cutoff. Feature columns must be values known at that decision time, not post-outcome fields. Prefer leakage-reviewed features such as invoice amount, terms and strictly historical payment behavior.
 
-The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. The inventory template includes optional `recent_demand`, `on_hand`, `lead_time_days`, and `stockout_label` fields for supervised stock-out training. The receivables template includes leakage-reviewed aliases for historical overdue rate, payment delay and payment terms. Build approved SQL views in staging and confirm all aliases, historical labels, joins, currencies, deleted records and document lifecycle statuses before use.
+The included example mapping is deliberately a **template**, not a verified mapping of the current ERP entities. The inventory template includes optional `recent_demand`, `on_hand`, `lead_time_days`, and `stockout_label` fields for supervised stock-out training. The receivables template includes leakage-reviewed aliases for historical overdue rate, payment delay and payment terms. Verify entity relations, aliases, historical labels, currencies, deleted records and document lifecycle statuses before use.
 
 ## API overview
 
