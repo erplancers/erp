@@ -23,7 +23,7 @@ configurations.configureEach {
 }
 
 // Resolve the LZ4 capability conflict for the root application's test/runtime
-// classpaths as well as the Spark module's own configurations.
+// classpaths as well as Spark's transitive Hadoop/Kafka dependencies.
 configurations.configureEach {
 	resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
 		select('at.yawk.lz4:lz4-java:1.10.1')
@@ -33,7 +33,12 @@ configurations.configureEach {
 
 
 dependencies {
-	implementation project(':spark-analytics')
+	// Analytics is compiled and packaged directly as part of the ERP backend.
+	implementation 'org.apache.spark:spark-sql_2.13:4.0.1'
+	implementation 'org.apache.spark:spark-mllib_2.13:4.0.1'
+	implementation 'org.apache.kafka:kafka-clients:4.1.0'
+	implementation 'org.apache.hadoop:hadoop-aws:3.4.1'
+	implementation 'org.apache.hadoop:hadoop-azure:3.4.1'
 	// Source: https://mvnrepository.com/artifact/org.webjars/bootstrap
 	implementation 'org.webjars:bootstrap:5.3.8'
 	implementation 'org.springframework.kafka:spring-kafka'
@@ -82,7 +87,6 @@ dependencies {
 
 dependencyManagement {
 	imports {
-
 
 		//mavenBom "com.vaadin:vaadin-bom:$vaadinVersion"
 
