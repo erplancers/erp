@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,6 +13,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.*;
@@ -60,6 +60,7 @@ public class AnalyticsJobController {
     private final ObjectMapper objectMapper;
 
     @PostMapping("/jobs")
+    @Transactional
     public ResponseEntity<JobView> submit(Authentication authentication, @Valid @RequestBody AnalyticsJobRequest request) {
         require(authentication, "WRITE");
         String jobType = request.jobType().trim().toUpperCase(Locale.ROOT);
@@ -78,20 +79,38 @@ public class AnalyticsJobController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid job parameters");
         }
         String id = UUID.randomUUID().toString();
-        try {
-            jdbc.update("""
-                    INSERT INTO analytics_job
-                    (id, tenant_id, requested_by, job_type, dataset_key, scope_type,
-                     parameters_json, idempotency_key, status, attempt_count, max_attempts)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', 0, 3)
-                    """, id, request.tenantId(), authentication.getName(), jobType,
-                    request.datasetKey(), dataset.scopeType(), parametersJson, request.idempotencyKey());
-        } catch (DuplicateKeyException duplicate) {
-            if (request.idempotencyKey() == null || request.idempotencyKey().isBlank()) throw duplicate;
+        int inserted = jdbc.update("""
+                INSERT INTO analytics_job
+                (id, tenant_id, requested_by, job_type, dataset_key, scope_type,
+                 parameters_json, idempotency_key, status, attempt_count, max_attempts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'QUEUED', 0, 3)
+                ON CONFLICT (tenant_id, requested_by, idempotency_key) DO NOTHING
+                """, id, request.tenantId(), authentication.getName(), jobType,
+                request.datasetKey(), dataset.scopeType(), parametersJson, request.idempotencyKey());
+        if (inserted == 0) {
             List<JobView> existing = findJob(request.tenantId(), authentication.getName(), request.idempotencyKey());
-            if (existing.isEmpty()) throw duplicate;
+            if (existing.isEmpty()) throw new ResponseStatusException(HttpStatus.CONFLICT, "Idempotency key already exists");
             return ResponseEntity.accepted().body(existing.getFirst());
         }
+        String eventId = UUID.randomUUID().toString();
+        String eventPayload;
+        try {
+            eventPayload = objectMapper.writeValueAsString(Map.of(
+                    "eventId", eventId,
+                    "eventType", "analytics.job.queued",
+                    "schemaVersion", 1,
+                    "occurredAt", Instant.now().toString(),
+                    "jobId", id,
+                    "tenantId", request.tenantId(),
+                    "jobType", jobType,
+                    "datasetKey", request.datasetKey()));
+        } catch (JsonProcessingException serializationFailure) {
+            throw new IllegalStateException("Could not serialize analytics outbox event", serializationFailure);
+        }
+        jdbc.update("""
+                INSERT INTO analytics_event_outbox (event_id, aggregate_id, topic, event_key, payload_json)
+                VALUES (?, ?, 'erp.analytics.job.queued.v1', ?, ?)
+                """, eventId, id, id, eventPayload);
         return ResponseEntity.accepted().body(getOwnedJob(id, request.tenantId(), authentication.getName()));
     }
 
