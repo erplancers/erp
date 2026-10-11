@@ -154,7 +154,7 @@ class ApiSecurityIntegrationTest {
                 .andExpect(jsonPath("$.rowCount", is(2)))
                 .andExpect(jsonPath("$.rows[0].status", is("SETTLED")))
                 .andExpect(jsonPath("$.rows[0].count", is(2)))
-                .andExpect(jsonPath("$.rows[0].sum:amount", is(350)));
+                .andExpect(jsonPath("$['rows'][0]['sum:amount']", is(350)));
     }
 
     @Test void adminCanRunBiAnalyze() throws Exception {
