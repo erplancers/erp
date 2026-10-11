@@ -45,7 +45,7 @@ public final class AnalyticsDatasetCatalog {
             String base = prefix + key + ".";
             String table = properties.getProperty(base + "entity");
             if (table == null || table.isBlank()) table = required(properties, base + "table");
-            else table = table.trim();
+            else table = required(properties, base + "entity");
             String sourceColumns = required(properties, base + "columns");
             String tenantColumn = required(properties, base + "tenant-column");
             String scopeColumn = required(properties, base + "scope-column");
