@@ -57,8 +57,9 @@ class SalesTrendIntelligenceTest {
         assertEquals(Date.valueOf("2026-02-01"), trends.get(1).getAs("month"));
         assertEquals(0.0, ((Number) trends.get(1).getAs("revenue")).doubleValue(), 0.0001);
         assertEquals(-100.0, ((Number) trends.get(1).getAs("mom_change")).doubleValue(), 0.0001);
-        assertNull(trends.get(1).getAs("mom_growth_pct"), "Growth is undefined from a zero baseline");
+        assertEquals(-100.0, ((Number) trends.get(1).getAs("mom_growth_pct")).doubleValue(), 0.0001);
         assertEquals(300.0, ((Number) trends.get(2).getAs("revenue")).doubleValue(), 0.0001);
+        assertNull(trends.get(2).getAs("mom_growth_pct"), "Growth is undefined from a zero baseline");
         assertEquals(133.333333, ((Number) trends.get(2).getAs("trailing_3_month_avg_revenue")).doubleValue(), 0.001);
         assertNull(trends.get(2).getAs("yoy_growth_pct"), "YoY growth requires a 12-month baseline");
     }
