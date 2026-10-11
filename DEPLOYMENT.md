@@ -48,14 +48,21 @@ The ERP inserts each analytics job and its erp.analytics.job.queued.v1 outbox ev
 
 The broker is reachable from containers at kafka:29092 and from host tools at localhost:9092. This Compose broker is a single-node development setup, not a production HA cluster.
 
-To run the Spark worker, first create an operator-approved catalogue at deploy/analytics-datasets.properties using the documented protected catalogue template and real approved view mappings. Do not use placeholder mappings in production. Then start the opt-in worker profile:
+## Embedded Spark analytics engine
+
+Spark SQL and Spark MLlib are now packaged as a Gradle dependency of the main Spring Boot backend and run in the same backend JVM on a managed lifecycle thread. HTTP requests only enqueue jobs; they never execute Spark work on request threads. The standalone `analytics-worker` Compose service has been removed. PostgreSQL leases still coordinate job claims, while Kafka topic `erp.analytics.job.queued.v1` wakes the embedded engine promptly; database polling remains the fallback.
+
+The engine is disabled by default. Configure an operator-approved catalogue and a separate least-privilege PostgreSQL read-only login before enabling it:
 
 ```sh
-docker compose --profile analytics up -d --build
-docker compose logs -f analytics-worker
+cp deploy/analytics-datasets.properties.example deploy/analytics-datasets.properties
+# Edit the file: replace every YOUR_ placeholder with real approved views/columns.
+# In .env set ANALYTICS_ENGINE_ENABLED=true and configure ANALYTICS_READ_USER/PASSWORD.
+docker compose up -d --build
+docker compose logs -f backend
 ```
 
-The worker runs as a separate Java 17 process/container. For production, configure distinct least-privilege metadata and read-only PostgreSQL roles, protected catalogue/credentials, private artifact storage, resource limits, and a multi-node Kafka deployment.
+The backend mounts `deploy/` read-only at `/run/config` and persists output under the `analytics_artifacts` volume. Do not enable the engine with placeholder mappings. For production, configure distinct least-privilege metadata/read-only PostgreSQL roles, protected secrets, private artifact storage, resource limits, and a multi-node secured Kafka deployment. Spark now shares backend JVM memory and CPU, so set container memory/CPU limits and monitor heap, GC, and job concurrency.
 
 
 ## Production notes
