@@ -95,4 +95,11 @@ public final class AnalyticsDatasetCatalog {
     private static void validateIdentifier(String value, String name) {
         if (!IDENTIFIER.matcher(value).matches()) throw new IllegalArgumentException("Unsafe " + name + ": " + value);
     }
+
+    private static void validatePath(String value, String name) {
+        if (value == null || value.isBlank()
+                || Arrays.stream(value.split("[.]")).anyMatch(part -> !IDENTIFIER.matcher(part).matches())) {
+            throw new IllegalArgumentException("Unsafe " + name + ": " + value);
+        }
+    }
 }
