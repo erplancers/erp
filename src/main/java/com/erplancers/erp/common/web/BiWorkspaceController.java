@@ -158,7 +158,9 @@ public class BiWorkspaceController {
         if (!isAdmin(authentication)) throw new AccessDeniedException("BI monitoring requires ADMIN role");
         Map<String, Object> counts = new LinkedHashMap<>();
         jdbc.query("SELECT status, COUNT(*) AS total FROM bi_report_execution GROUP BY status",
-                rs -> counts.put(rs.getString("status"), rs.getLong("total")));
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> {
+                    counts.put(rs.getString("status"), rs.getLong("total"));
+                });
         Long queries24h = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM bi_query_audit WHERE created_at >= ?", Long.class,
                 Timestamp.from(Instant.now().minus(Duration.ofHours(24))));
