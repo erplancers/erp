@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS bi_saved_report (
     resource_slug VARCHAR(160) NOT NULL,
     query_json TEXT NOT NULL,
     shared_with_json TEXT NOT NULL DEFAULT '[]',
+    shared_roles_json TEXT NOT NULL DEFAULT '[]',
     schedule_interval_minutes INTEGER,
     schedule_emails_json TEXT NOT NULL DEFAULT '[]',
     schedule_authorities_json TEXT NOT NULL DEFAULT '[]',
