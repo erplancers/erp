@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.erplancers.erp.common.reporting.ErpBiEngine;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
@@ -61,7 +60,7 @@ public class BiWorkspaceController {
 
     @PostMapping("/reports")
     @ResponseStatus(HttpStatus.CREATED)
-    public ReportView create(Authentication authentication, @RequestBody SaveReportRequest request) {
+    public ReportView create(Authentication authentication, @RequestBody SaveReportRequest request) throws Exception {
         requireAuthenticated(authentication);
         validate(request);
         requireRead(authentication, request.resourceSlug());
@@ -75,7 +74,7 @@ public class BiWorkspaceController {
                    enabled, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, id, authentication.getName(), cleanTitle(request.title()), request.resourceSlug(),
-                mapper.writeValueAsString(request.query()), json(request.sharedWith()), json(request.sharedRoles()),
+                mapper.writeValueAsString(request.query()), json(safeList(request.sharedWith())), json(safeList(request.sharedRoles()).stream().map(BiWorkspaceController::normalizeRole).toList()),
                 request.scheduleIntervalMinutes(), json(request.scheduleEmails()), json(authorities(authentication)),
                 next == null ? null : Timestamp.from(next), Boolean.TRUE.equals(request.enabled()),
                 Timestamp.from(now), Timestamp.from(now));
@@ -92,7 +91,7 @@ public class BiWorkspaceController {
 
     @PutMapping("/reports/{id}")
     public ReportView update(Authentication authentication, @PathVariable String id,
-                             @RequestBody SaveReportRequest request) {
+                             @RequestBody SaveReportRequest request) throws Exception {
         requireAuthenticated(authentication);
         ReportView existing = findReport(id);
         requireOwner(authentication, existing);
@@ -106,7 +105,7 @@ public class BiWorkspaceController {
                        schedule_authorities_json = ?, next_run_at = ?, enabled = ?, updated_at = ?
                  WHERE id = ?
                 """, cleanTitle(request.title()), request.resourceSlug(), mapper.writeValueAsString(request.query()),
-                json(request.sharedWith()), json(request.sharedRoles()), request.scheduleIntervalMinutes(),
+                json(safeList(request.sharedWith())), json(safeList(request.sharedRoles()).stream().map(BiWorkspaceController::normalizeRole).toList()), request.scheduleIntervalMinutes(),
                 json(request.scheduleEmails()), json(authorities(authentication)),
                 next == null ? null : Timestamp.from(next), Boolean.TRUE.equals(request.enabled()),
                 Timestamp.from(Instant.now()), id);
@@ -417,7 +416,7 @@ public class BiWorkspaceController {
         try { return value == null ? List.of() : mapper.readValue(value, STRINGS); }
         catch (Exception ex) { return List.of(); }
     }
-    private Object parseJson(String value) {
+    private JsonNode parseJson(String value) {
         try { return value == null ? null : mapper.readTree(value); }
         catch (Exception ex) { return null; }
     }
@@ -430,7 +429,7 @@ public class BiWorkspaceController {
                                     List<String> sharedWith, List<String> sharedRoles,
                                     Integer scheduleIntervalMinutes, List<String> scheduleEmails,
                                     Boolean enabled) {}
-    public record ReportView(String id, String owner, String title, String resourceSlug, Object query,
+    public record ReportView(String id, String owner, String title, String resourceSlug, JsonNode query,
                              List<String> sharedWith, List<String> sharedRoles, Integer scheduleIntervalMinutes,
                              List<String> scheduleEmails, Instant nextRunAt, Instant lastRunAt,
                              boolean enabled, Instant createdAt, Instant updatedAt) {}
