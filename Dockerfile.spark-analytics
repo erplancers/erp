@@ -1,0 +1,19 @@
+FROM eclipse-temurin:25-jdk AS build
+WORKDIR /workspace
+COPY gradlew settings.gradle build.gradle ./
+COPY gradle ./gradle
+COPY spark-analytics ./spark-analytics
+RUN chmod +x gradlew && ./gradlew :spark-analytics:installDist --no-daemon
+
+FROM eclipse-temurin:17-jre
+WORKDIR /opt/analytics
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10002 analytics \
+    && mkdir -p /var/lib/erplancers/analytics
+COPY --from=build /workspace/spark-analytics/build/install/spark-analytics /opt/analytics
+RUN chown -R analytics:analytics /opt/analytics /var/lib/erplancers/analytics
+USER analytics
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/analytics/bin/spark-analytics"]
