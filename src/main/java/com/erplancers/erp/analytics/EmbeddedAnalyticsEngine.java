@@ -22,12 +22,14 @@ public class EmbeddedAnalyticsEngine implements SmartLifecycle {
     private static final Logger log = LoggerFactory.getLogger(EmbeddedAnalyticsEngine.class);
 
     private final Environment environment;
+    private final AnalyticsSourceReader analyticsSourceReader;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile Thread engineThread;
     private volatile String state = "STOPPED";
 
-    public EmbeddedAnalyticsEngine(Environment environment) {
+    public EmbeddedAnalyticsEngine(Environment environment, AnalyticsSourceReader analyticsSourceReader) {
         this.environment = environment;
+        this.analyticsSourceReader = analyticsSourceReader;
     }
 
     @Override
