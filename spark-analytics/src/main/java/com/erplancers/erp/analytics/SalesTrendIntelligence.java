@@ -55,13 +55,13 @@ public final class SalesTrendIntelligence {
                 .withColumn("prior_month_revenue", lag(col("revenue"), 1).over(chronological))
                 .withColumn("mom_change", col("revenue").minus(col("prior_month_revenue")))
                 .withColumn("mom_growth_pct",
-                        when(col("prior_month_revenue").notNull()
+                        when(col("prior_month_revenue").isNotNull()
                                         .and(abs(col("prior_month_revenue")).gt(0.0)),
                                 col("mom_change").divide(abs(col("prior_month_revenue"))).multiply(100.0)))
                 .withColumn("trailing_3_month_avg_revenue", avg(col("revenue")).over(trailingThree))
                 .withColumn("prior_year_revenue", lag(col("revenue"), 12).over(chronological))
                 .withColumn("yoy_growth_pct",
-                        when(col("prior_year_revenue").notNull()
+                        when(col("prior_year_revenue").isNotNull()
                                         .and(abs(col("prior_year_revenue")).gt(0.0)),
                                 col("revenue").minus(col("prior_year_revenue"))
                                         .divide(abs(col("prior_year_revenue"))).multiply(100.0)));
