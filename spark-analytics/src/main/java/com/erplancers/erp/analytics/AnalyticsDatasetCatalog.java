@@ -51,7 +51,7 @@ public final class AnalyticsDatasetCatalog {
             String scopeColumn = required(properties, base + "scope-column");
             String scopeType = required(properties, base + "scope-type").toUpperCase(Locale.ROOT);
             if (!TABLE.matcher(table).matches()) throw new IllegalArgumentException("Unsafe table identifier for " + key);
-            validateIdentifier(tenantColumn, "tenantColumn");
+            validatePath(tenantColumn, "tenantColumn");
             validatePath(scopeColumn, "scopeColumn");
             if (!Set.of("CONTACT", "WAREHOUSE", "COST_CENTER").contains(scopeType)) {
                 throw new IllegalArgumentException("Unsupported scope type for " + key + ": " + scopeType);
