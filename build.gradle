@@ -82,6 +82,9 @@ dependencies {
 
 	runtimeOnly 'com.h2database:h2'
 	testCompileOnly 'org.projectlombok:lombok'
+	// Spark 4.0.1's shaded Jetty still links against this Servlet 5 API type.
+	// Keep the compatibility API test-only; production remains on Spring Boot 4's servlet stack.
+	testRuntimeOnly 'jakarta.servlet:jakarta.servlet-api:5.0.0'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
