@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Date;
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -19,11 +20,15 @@ class SalesTrendIntelligenceTest {
 
     @BeforeAll
     static void startSpark() {
+        // Spark reads its metrics configuration from a JVM system property, not SparkConf.
+        // The empty test config prevents the default servlet metrics sink from loading
+        // Spark's shaded Jetty against Spring Boot 4's newer Servlet API.
+        System.setProperty("spark.metrics.conf",
+                Path.of("src/test/resources/spark-metrics.properties").toAbsolutePath().toString());
         spark = SparkSession.builder()
                 .appName("sales-trend-intelligence-test")
                 .master("local[1]")
                 .config("spark.ui.enabled", "false")
-                .config("spark.metrics.conf", "src/test/resources/spark-metrics.properties")
                 .config("spark.driver.host", "127.0.0.1")
                 .config("spark.sql.shuffle.partitions", "1")
                 .getOrCreate();
