@@ -20,7 +20,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 /**
- * Secured control-plane endpoints. Spark is never launched inside an HTTP request.
+ * Secured analytics endpoints. Jobs are queued over HTTP and executed by the managed embedded engine, never on request threads.
  * Tenant/scope grants are managed out-of-band by an administrator.
  */
 @RestController
