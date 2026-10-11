@@ -20,7 +20,7 @@ import org.apache.spark.sql.SparkSession;
  * Reads only operator-allowlisted, explicitly projected views and enforces live tenant/scope
  * grants in PostgreSQL before rows are exposed to Spark transformations.
  */
-public final class ScopedPostgresReader {
+public final class ScopedPostgresReader implements AnalyticsSourceReader {
     private static final Pattern SAFE_TENANT = Pattern.compile("[A-Za-z0-9_.:@-]{1,160}");
     private final SparkSession spark;
     private final String jdbcUrl;
