@@ -23,6 +23,7 @@ class SalesTrendIntelligenceTest {
                 .appName("sales-trend-intelligence-test")
                 .master("local[1]")
                 .config("spark.ui.enabled", "false")
+                .config("spark.metrics.conf", "src/test/resources/spark-metrics.properties")
                 .config("spark.driver.host", "127.0.0.1")
                 .config("spark.sql.shuffle.partitions", "1")
                 .getOrCreate();
