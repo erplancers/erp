@@ -20,6 +20,7 @@ repositories {
 dependencies {
 	// Source: https://mvnrepository.com/artifact/org.webjars/bootstrap
 	implementation 'org.webjars:bootstrap:5.3.8'
+	implementation 'org.springframework.kafka:spring-kafka'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'org.springframework.boot:spring-boot-starter-batch'
 	implementation 'org.springframework.boot:spring-boot-starter-batch-jdbc'
