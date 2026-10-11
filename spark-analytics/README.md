@@ -94,7 +94,6 @@ Available environment variables:
 | `ANALYTICS_METADATA_JDBC_URL` | PostgreSQL URL for analytics metadata/job queue |
 | `ANALYTICS_METADATA_USER`, `ANALYTICS_METADATA_PASSWORD` | Metadata DB credentials |
 | `ANALYTICS_DATASETS_CONFIG` | Protected file containing JPA entity/attribute allowlist |
-| `ANALYTICS_READ_USER`, `ANALYTICS_READ_PASSWORD` | Read-only extraction credentials |
 | `ANALYTICS_DATASETS_CONFIG` | Path to the protected, operator-managed source catalogue |
 | `ANALYTICS_ARTIFACT_URI` | Protected URI root; supported schemes `file:`, `hdfs:`, `s3a:`, `abfs:`; cloud connectors are bundled |
 | `SPARK_MASTER` | Spark master URL, default `local[*]`; set cluster master in production |
