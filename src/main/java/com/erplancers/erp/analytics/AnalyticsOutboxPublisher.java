@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 
 /** At-least-once outbox relay: job creation and notification intent commit atomically. */
 @Component
+@ConditionalOnProperty(prefix = "analytics.engine", name = "enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class AnalyticsOutboxPublisher {
     private static final Logger log = LoggerFactory.getLogger(AnalyticsOutboxPublisher.class);
