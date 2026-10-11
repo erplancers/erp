@@ -16,12 +16,12 @@ import java.util.stream.Collectors;
 /** Dispatches allowlisted BI/ML jobs over server-configured, row-scoped source datasets. */
 public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
     private final AnalyticsDatasetCatalog catalog;
-    private final ScopedPostgresReader reader;
+    private final AnalyticsSourceReader reader;
     private final AnalyticsJobStore store;
     private final String artifactRoot;
     private final ObjectMapper json = new ObjectMapper();
 
-    public SparkAnalyticsJobProcessor(AnalyticsDatasetCatalog catalog, ScopedPostgresReader reader,
+    public SparkAnalyticsJobProcessor(AnalyticsDatasetCatalog catalog, AnalyticsSourceReader reader,
                                       AnalyticsJobStore store, String artifactRoot) {
         this.catalog = Objects.requireNonNull(catalog);
         this.reader = Objects.requireNonNull(reader);
