@@ -30,16 +30,17 @@ import java.util.regex.Pattern;
 public class AnalyticsJobController {
     private static final Pattern SAFE_ALIAS = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,63}");
     private static final Set<String> SUPPORTED_JOBS = Set.of(
-            "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
+            "SALES_TREND_ANALYSIS", "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
             "MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
-            "sales_orders", new DatasetPolicy("CONTACT", Set.of("RFM", "COHORT_ANALYSIS",
+            "sales_orders", new DatasetPolicy("CONTACT", Set.of("SALES_TREND_ANALYSIS", "RFM", "COHORT_ANALYSIS",
                     "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING")),
             "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
             "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET", "PRODUCT_RECOMMENDATIONS")),
             "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.ofEntries(
+            Map.entry("SALES_TREND_ANALYSIS", Set.of()),
             Map.entry("RFM", Set.of("asOfDate")),
             Map.entry("COHORT_ANALYSIS", Set.of()),
             Map.entry("CUSTOMER_LIFETIME_VALUE", Set.of()),
