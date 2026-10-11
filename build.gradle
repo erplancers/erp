@@ -16,6 +16,15 @@ repositories {
 	mavenCentral()
 }
 
+// Resolve the LZ4 capability conflict for the root application's test/runtime
+// classpaths as well as the Spark module's own configurations.
+configurations.configureEach {
+	resolutionStrategy.capabilitiesResolution.withCapability('org.lz4:lz4-java') {
+		select('at.yawk.lz4:lz4-java:1.10.1')
+		because 'Kafka 4.x requires the newer LZ4 provider used by at.yawk.lz4'
+	}
+}
+
 
 dependencies {
 	implementation project(':spark-analytics')
