@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Deployment-specific source mappings should remain local and untracked.
+/deploy/analytics-datasets.properties
