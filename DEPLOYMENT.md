@@ -9,6 +9,8 @@
 - TanStack Query
 - Recharts
 - Nginx reverse proxy
+- Apache Kafka 4 (KRaft, single-node development deployment)
+- PostgreSQL transactional outbox for analytics-job notifications
 - Docker Compose
 
 The React application uses the existing `/api` REST surface, including resource browsing, analytics, BI and OLAP endpoints. Nginx keeps the browser same-origin with Spring Boot, so no production CORS configuration is required.
@@ -38,7 +40,23 @@ docker compose logs -f frontend
 docker compose down
 ```
 
-PostgreSQL data is persisted in the `postgres_data` volume.
+PostgreSQL data is persisted in the `postgres_data` volume and Kafka data in `kafka_data`.
+
+## Kafka analytics integration
+
+The ERP inserts each analytics job and its erp.analytics.job.queued.v1 outbox event in the same database transaction. A scheduled relay publishes pending outbox events with Kafka producer idempotence and acks=all; failed sends remain in PostgreSQL for retry. Delivery is at-least-once, so events carry an eventId and consumers must tolerate duplicates. Kafka events are wake-up notifications only: the Spark worker reloads job state and tenant-safe parameters from the PostgreSQL queue, whose row leases remain authoritative. The worker continues polling PostgreSQL if Kafka is offline.
+
+The broker is reachable from containers at kafka:29092 and from host tools at localhost:9092. This Compose broker is a single-node development setup, not a production HA cluster.
+
+To run the Spark worker, first create an operator-approved catalogue at deploy/analytics-datasets.properties using the documented protected catalogue template and real approved view mappings. Do not use placeholder mappings in production. Then start the opt-in worker profile:
+
+```sh
+docker compose --profile analytics up -d --build
+docker compose logs -f analytics-worker
+```
+
+The worker runs as a separate Java 17 process/container. For production, configure distinct least-privilege metadata and read-only PostgreSQL roles, protected catalogue/credentials, private artifact storage, resource limits, and a multi-node Kafka deployment.
+
 
 ## Production notes
 
