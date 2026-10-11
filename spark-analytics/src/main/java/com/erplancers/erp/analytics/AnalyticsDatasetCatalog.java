@@ -10,14 +10,14 @@ import java.util.regex.Pattern;
 /** Loads an operator-managed allowlist of JPA entities and mapped attributes. */
 public final class AnalyticsDatasetCatalog {
     private static final Pattern IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}");
-    private static final Pattern TABLE = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}(\\.[A-Za-z_][A-Za-z0-9_]{0,62})?");
+    private static final Pattern ENTITY_NAME = Pattern.compile("[A-Za-z_][A-Za-z0-9_]{0,62}(\\.[A-Za-z_][A-Za-z0-9_]{0,62})?");
     private final Map<String, DatasetDefinition> definitions;
 
     public record Projection(String sourceColumn, String logicalAlias) {}
-    public record DatasetDefinition(String key, String table, List<Projection> projections,
+    public record DatasetDefinition(String key, String entityName, List<Projection> projections,
                                     String tenantColumn, String scopeColumn, String scopeType) {
         public DatasetDefinition { projections = List.copyOf(projections); }
-        public String entityName() { return table; }
+        public String table() { return entityName; }
         public Set<String> logicalColumns() {
             Set<String> names = new HashSet<>();
             projections.forEach(p -> names.add(p.logicalAlias()));
@@ -50,7 +50,7 @@ public final class AnalyticsDatasetCatalog {
             String tenantColumn = required(properties, base + "tenant-column");
             String scopeColumn = required(properties, base + "scope-column");
             String scopeType = required(properties, base + "scope-type").toUpperCase(Locale.ROOT);
-            if (!TABLE.matcher(table).matches()) throw new IllegalArgumentException("Unsafe table identifier for " + key);
+            if (!ENTITY_NAME.matcher(table).matches()) throw new IllegalArgumentException("Unsafe JPA entity name for " + key);
             validatePath(tenantColumn, "tenantColumn");
             validatePath(scopeColumn, "scopeColumn");
             if (!Set.of("CONTACT", "WAREHOUSE", "COST_CENTER").contains(scopeType)) {
