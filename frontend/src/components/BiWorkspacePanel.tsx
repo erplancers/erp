@@ -33,6 +33,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
   const [error, setError] = useState("");
   const [executionId, setExecutionId] = useState("");
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const [editingQuery, setEditingQuery] = useState<Record<string, unknown> | null>(null);
   const monitoring = useQuery({ queryKey: ["bi-workspace-monitoring"], queryFn: () => api.biWorkspaceMonitoring(credentials), enabled: false });
 
   const reports = useQuery({
@@ -66,7 +67,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
       const payload = {
         title,
         resourceSlug: slug,
-        query: { ...query, calculatedMeasures },
+        query: { ...(editingReportId && editingQuery ? editingQuery : query), calculatedMeasures },
         sharedWith: splitValues(sharedUsers),
         sharedRoles: splitValues(sharedRoles),
         scheduleIntervalMinutes: interval ? Number(interval) : null,
@@ -77,6 +78,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
       else await api.saveBiWorkspaceReport(payload, credentials);
       setMessage(editingReportId ? "Report updated." : "Report saved. Sharing and schedule settings have been stored.");
       setEditingReportId(null);
+      setEditingQuery(null);
       await queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save report");
@@ -91,6 +93,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
     setInterval(report.scheduleIntervalMinutes == null ? "" : String(report.scheduleIntervalMinutes));
     setEmails((report.scheduleEmails ?? []).join(", "));
     const savedQuery = report.query && typeof report.query === "object" ? report.query : {};
+    setEditingQuery(savedQuery as Record<string, unknown>);
     const savedMeasures = savedQuery.calculatedMeasures && typeof savedQuery.calculatedMeasures === "object" ? savedQuery.calculatedMeasures : {};
     onCalculatedMeasuresChange(savedMeasures as Record<string, string>);
     setError("");
@@ -102,7 +105,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
     setMessage("");
     try {
       await api.deleteBiWorkspaceReport(id, credentials);
-      if (editingReportId === id) setEditingReportId(null);
+      if (editingReportId === id) { setEditingReportId(null); setEditingQuery(null); }
       setMessage("Saved report deleted.");
       await queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] });
     } catch (reason) {
@@ -178,7 +181,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
           <Button label={editingReportId ? "Update report" : "Save current report"} icon="pi pi-save" onClick={saveReport} disabled={!title.trim()} />
-          {editingReportId && <Button label="Cancel edit" icon="pi pi-times" severity="secondary" outlined onClick={() => { setEditingReportId(null); setTitle(slug + " report"); setMessage(""); }} />}
+          {editingReportId && <Button label="Cancel edit" icon="pi pi-times" severity="secondary" outlined onClick={() => { setEditingReportId(null); setEditingQuery(null); setTitle(slug + " report"); setMessage(""); }} />}
           <Button label="Load monitoring" icon="pi pi-chart-bar" severity="secondary" outlined onClick={() => monitoring.refetch()} />
           <Button label="Refresh saved reports" icon="pi pi-refresh" severity="secondary" outlined
             onClick={() => queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] })} />
