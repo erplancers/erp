@@ -32,6 +32,8 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [executionId, setExecutionId] = useState("");
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
+  const monitoring = useQuery({ queryKey: ["bi-workspace-monitoring"], queryFn: () => api.biWorkspaceMonitoring(credentials), enabled: false });
 
   const reports = useQuery({
     queryKey: ["bi-workspace-reports"],
@@ -61,7 +63,7 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
     setError("");
     setMessage("");
     try {
-      await api.saveBiWorkspaceReport({
+      const payload = {
         title,
         resourceSlug: slug,
         query: { ...query, calculatedMeasures },
@@ -70,11 +72,41 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
         scheduleIntervalMinutes: interval ? Number(interval) : null,
         scheduleEmails: splitValues(emails),
         enabled: Boolean(interval)
-      }, credentials);
-      setMessage("Report saved. Sharing and schedule settings have been stored.");
+      };
+      if (editingReportId) await api.updateBiWorkspaceReport(editingReportId, payload, credentials);
+      else await api.saveBiWorkspaceReport(payload, credentials);
+      setMessage(editingReportId ? "Report updated." : "Report saved. Sharing and schedule settings have been stored.");
+      setEditingReportId(null);
       await queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to save report");
+    }
+  }
+
+  function editReport(report: any) {
+    setEditingReportId(report.id);
+    setTitle(report.title ?? "");
+    setSharedUsers((report.sharedWith ?? []).join(", "));
+    setSharedRoles((report.sharedRoles ?? []).join(", "));
+    setInterval(report.scheduleIntervalMinutes == null ? "" : String(report.scheduleIntervalMinutes));
+    setEmails((report.scheduleEmails ?? []).join(", "));
+    const savedQuery = report.query && typeof report.query === "object" ? report.query : {};
+    const savedMeasures = savedQuery.calculatedMeasures && typeof savedQuery.calculatedMeasures === "object" ? savedQuery.calculatedMeasures : {};
+    onCalculatedMeasuresChange(savedMeasures as Record<string, string>);
+    setError("");
+    setMessage("Editing saved report. Save changes to update it.");
+  }
+
+  async function deleteReport(id: string) {
+    setError("");
+    setMessage("");
+    try {
+      await api.deleteBiWorkspaceReport(id, credentials);
+      if (editingReportId === id) setEditingReportId(null);
+      setMessage("Saved report deleted.");
+      await queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to delete report");
     }
   }
 
@@ -145,7 +177,9 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
           </label>
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
-          <Button label="Save current report" icon="pi pi-save" onClick={saveReport} disabled={!title.trim()} />
+          <Button label={editingReportId ? "Update report" : "Save current report"} icon="pi pi-save" onClick={saveReport} disabled={!title.trim()} />
+          {editingReportId && <Button label="Cancel edit" icon="pi pi-times" severity="secondary" outlined onClick={() => { setEditingReportId(null); setTitle(slug + " report"); setMessage(""); }} />}
+          <Button label="Load monitoring" icon="pi pi-chart-bar" severity="secondary" outlined onClick={() => monitoring.refetch()} />
           <Button label="Refresh saved reports" icon="pi pi-refresh" severity="secondary" outlined
             onClick={() => queryClient.invalidateQueries({ queryKey: ["bi-workspace-reports"] })} />
         </div>
@@ -153,16 +187,18 @@ export function BiWorkspacePanel({ slug, credentials, query, calculatedMeasures,
         {error && <Message severity="error" text={error} className="mt-3" />}
         {reports.isError && <Message severity="warn" text={reports.error.message} className="mt-3" />}
         <div className="flex flex-column gap-2 mt-3">
-          {(reports.data ?? []).map((report: any) => (
+          {(reports.data ?? []).filter((report: any) => report.resourceSlug === slug).map((report: any) => (
             <div key={report.id} className="flex flex-wrap align-items-center justify-content-between gap-2 p-2 border-1 surface-border border-round">
               <div>
                 <strong>{report.title}</strong><div className="text-500 text-sm">{report.resourceSlug} · owner {report.owner}
                   {report.scheduleIntervalMinutes ? " · every " + report.scheduleIntervalMinutes + " min" : ""}</div>
               </div>
-              <Button label="Queue run" icon="pi pi-play" size="small" onClick={() => executeReport(report.id)} />
+              <div className="flex flex-wrap gap-2"><Button label="Edit" icon="pi pi-pencil" size="small" severity="secondary" outlined onClick={() => editReport(report)} /><Button label="Queue run" icon="pi pi-play" size="small" onClick={() => executeReport(report.id)} /><Button label="Delete" icon="pi pi-trash" size="small" severity="danger" outlined onClick={() => deleteReport(report.id)} /></div>
             </div>
           ))}
-          {!reports.isPending && (reports.data?.length ?? 0) === 0 && <span className="text-500 text-sm">No saved reports yet.</span>}
+          {!reports.isPending && (reports.data ?? []).filter((report: any) => report.resourceSlug === slug).length === 0 && <span className="text-500 text-sm">No saved reports for this resource yet.</span>}
+        {monitoring.data && <Card title="BI workspace monitoring" className="mt-3"><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify(monitoring.data, null, 2)}</pre></Card>}
+        {monitoring.isError && <Message severity="warn" text={monitoring.error.message} className="mt-3" />}
         </div>
         {execution.data && <Message severity={execution.data.status === "FAILED" ? "error" : "info"}
           text={"Execution " + execution.data.id + ": " + execution.data.status
