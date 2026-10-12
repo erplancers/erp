@@ -79,3 +79,5 @@ export interface AnalyticsJobSubmitRequest {
   parameters: Record<string, unknown>;
   idempotencyKey?: string;
 }
+
+export interface AccountView { id?: number | string; code?: string; name?: string; accountType?: string; balanceType?: string; level?: number; postingAllowed?: boolean; reconciliationAccount?: boolean; blocked?: boolean; sortOrder?: number; contact?: unknown; currency?: unknown; accountParent?: unknown; [key: string]: unknown; }
