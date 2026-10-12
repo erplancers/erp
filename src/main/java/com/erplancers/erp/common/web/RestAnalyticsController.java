@@ -129,6 +129,7 @@ public class RestAnalyticsController {
                     item.put("name", d.entityType().getSimpleName());
                     item.put("aggregatePath", "/api/analytics/resources/" + d.slug() + "/aggregate");
                     item.put("advancedPath", "/api/analytics/resources/" + d.slug() + "/advanced");
+                    item.put("qualityPath", "/api/analytics/resources/" + d.slug() + "/quality");
                     return item;
                 })
                 .toList();
