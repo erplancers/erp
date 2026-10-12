@@ -22,13 +22,6 @@ configurations.configureEach {
 	exclude group: 'org.apache.logging.log4j', module: 'log4j-slf4j2-impl'
 }
 
-// Spark's embedded Jetty also casts LogManager's context to Log4j Core. Boot's
-// log4j-to-slf4j bridge returns an SLF4JLoggerContext instead, so isolate Spark's
-// Log4j API from that bridge in tests while keeping Boot's Logback provider.
-configurations.testRuntimeClasspath {
-\texclude group: 'org.apache.logging.log4j', module: 'log4j-to-slf4j'
-}
-
 // Resolve the LZ4 capability conflict for the root application's test/runtime
 // classpaths as well as Spark's transitive Hadoop/Kafka dependencies.
 configurations.configureEach {
@@ -90,7 +83,6 @@ dependencies {
 	runtimeOnly 'com.h2database:h2'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-\ttestRuntimeOnly 'org.apache.logging.log4j:log4j-core:2.25.2'
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
