@@ -81,3 +81,33 @@ export interface AnalyticsJobSubmitRequest {
 }
 
 export interface AccountView { id?: number | string; code?: string; name?: string; accountType?: string; balanceType?: string; level?: number; postingAllowed?: boolean; reconciliationAccount?: boolean; blocked?: boolean; sortOrder?: number; contact?: unknown; currency?: unknown; accountParent?: unknown; [key: string]: unknown; }
+
+export interface DataQualityField {
+  name: string;
+  javaType: string;
+  rowCount: number;
+  nonNullCount: number;
+  nullCount: number;
+  nullPercent: number;
+  distinctCount: number;
+  distinctPercent: number;
+  completenessScore: number;
+  min?: unknown;
+  max?: unknown;
+  average?: number | null;
+  sum?: unknown;
+  topValues: Array<{ value: unknown; count: number }>;
+  issues: string[];
+}
+export interface DataQualityReport {
+  resource: string;
+  module: string;
+  entity: string;
+  rowCount: number;
+  fieldCount: number;
+  completenessScore: number;
+  status: "HEALTHY" | "REVIEW" | "NEEDS_ATTENTION" | "NO_DATA" | string;
+  fieldsWithMissingValues: number;
+  fieldsWithHighNullRate: number;
+  fields: DataQualityField[];
+}
