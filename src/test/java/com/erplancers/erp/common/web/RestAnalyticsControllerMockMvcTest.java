@@ -172,4 +172,25 @@ class RestAnalyticsControllerMockMvcTest {
                         .content("{\"metrics\":[\"count\"]}"))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    void qualityEndpointReturnsCompletenessAndFieldDiagnostics() throws Exception {
+        mvc.perform(get("/api/analytics/resources/invoice/quality")
+                        .param("topValues", "5")
+                        .with(httpBasic("analytics-admin", "analytics-pass")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resource", is("invoice")))
+                .andExpect(jsonPath("$.rowCount", isA(Number.class)))
+                .andExpect(jsonPath("$.fieldCount", isA(Number.class)))
+                .andExpect(jsonPath("$.completenessScore", isA(Number.class)))
+                .andExpect(jsonPath("$.status", not(isEmptyOrNullString())))
+                .andExpect(jsonPath("$.fields", notNullValue()));
+    }
+
+    @Test
+    void qualityEndpointRequiresAuthentication() throws Exception {
+        mvc.perform(get("/api/analytics/resources/invoice/quality"))
+                .andExpect(status().isUnauthorized());
+    }
+
 }
