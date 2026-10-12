@@ -36,7 +36,7 @@ export function AccountsPage() {
       <DataTable value={rows} dataKey="id" selectionMode="single" selection={selected}
         onSelectionChange={e => setSelected(e.value as AccountView)}
         paginator rows={size} first={page * size} rowsPerPageOptions={[10, 20, 50, 100]}
-        onPage={e => { setPage(e.page); setSize(e.rows); setSelected(null); }}
+        onPage={e => { setPage(e.page ?? 0); setSize(e.rows); setSelected(null); }}
         emptyMessage="No accounts returned for this page." stripedRows scrollable>
         <Column field="code" header="Code" sortable />
         <Column field="name" header="Account" sortable />
