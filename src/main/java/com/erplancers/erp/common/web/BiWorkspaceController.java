@@ -180,7 +180,7 @@ public class BiWorkspaceController {
         return counts;
     }
 
-    @Scheduled(fixedDelayString = "${bi.schedule.poll-ms:60000}")
+    // Scheduling moved to BiWorkspaceWorker (JPA).
     public void enqueueDueSchedules() {
         List<ScheduledReport> due = jdbc.query("""
                 SELECT id, owner_username, resource_slug, query_json, schedule_interval_minutes,
@@ -218,7 +218,7 @@ public class BiWorkspaceController {
         }
     }
 
-    @Scheduled(fixedDelayString = "${bi.execution.poll-ms:2000}")
+    // Scheduling moved to BiWorkspaceWorker (JPA).
     public void processOneQueuedExecution() {
         List<QueuedExecution> queued = jdbc.query("""
                 SELECT id, report_id, requested_by, resource_slug, query_json,
