@@ -282,7 +282,7 @@ export function SparkOlapPage() {
         <div className="flex gap-2 align-items-center flex-wrap mb-3">
           <Tag value={selectedJob.status} severity={statusSeverity(selectedJob.status)} />
           <span className="text-600">Created {selectedJob.createdAt}</span>
-          {selectedResult?.outputPath && <span className="text-600">Output: {String(selectedResult.outputPath)}</span>}
+          {Boolean(selectedResult?.outputPath) && <span className="text-600">Output: {String(selectedResult?.outputPath)}</span>}
         </div>
         {selectedJob.errorMessage && <Message severity="error" text={selectedJob.errorMessage} />}
         {previewRows.length > 0 && <DataTable value={previewRows} paginator rows={10} size="small" stripedRows scrollable>
