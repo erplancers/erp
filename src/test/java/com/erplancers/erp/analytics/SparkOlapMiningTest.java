@@ -52,7 +52,7 @@ class SparkOlapMiningTest {
         List<Row> rows = result.collectAsList();
         assertEquals(2, rows.size());
         assertEquals("west", rows.getFirst().getAs("region"));
-        assertEquals(10.0, rows.getFirst().getAs("sum_amount"));
+        assertEquals(10.0, ((Number) rows.getFirst().getAs("sum_amount")).doubleValue(), 0.0001);
         assertEquals(1L, rows.getFirst().getAs("row_count"));
     }
 
