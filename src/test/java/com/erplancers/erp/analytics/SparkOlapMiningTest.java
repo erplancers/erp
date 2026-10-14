@@ -22,6 +22,7 @@ class SparkOlapMiningTest {
     @BeforeAll
     static void startSpark() throws Exception {
         Path metricsConfig = Files.createTempFile("spark-olap-metrics", ".properties");
+        Files.writeString(metricsConfig, "*.sink.console.class=org.apache.spark.metrics.sink.ConsoleSink\n*.sink.console.period=1\n*.sink.console.unit=minutes\n");
         spark = SparkSession.builder().appName("spark-olap-mining-test").master("local[2]")
                 .config("spark.ui.enabled", "false")
                 .config("spark.metrics.conf", metricsConfig.toString())
