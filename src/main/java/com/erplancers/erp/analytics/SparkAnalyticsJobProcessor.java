@@ -60,6 +60,34 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
         String outputPath = output + "/unassigned";
 
         switch (job.jobType()) {
+            case "SPARK_OLAP" -> {
+                List<String> dimensions = stringListAllowEmpty(p, "groupBy");
+                List<String> measures = stringList(p, "measures", List.of("count"));
+                Map<String, String> filters = stringMapParameter(p, "filters");
+                requireAliases(source, dimensions);
+                requireAliases(source, new ArrayList<>(filters.keySet()));
+                String mode = stringParameter(p, "mode", "GROUP").toUpperCase(Locale.ROOT);
+                String orderBy = stringParameter(p, "orderBy", "");
+                int limit = intParameter(p, "limit", 100, 1, 1000);
+                Dataset<Row> result = SparkOlapMining.execute(
+                        source, dimensions, measures, filters, mode, orderBy, limit);
+                long resultRows = result.count();
+                outputPath = write(result, output + "/spark-olap");
+                List<Map<String, Object>> preview = new ArrayList<>();
+                for (String rowJson : result.limit(50).toJSON().collectAsList()) {
+                    preview.add(json.readValue(rowJson, new TypeReference<Map<String, Object>>() {}));
+                }
+                metrics.put("sourceRows", sourceRows);
+                metrics.put("resultRows", resultRows);
+                metrics.put("dimensions", dimensions);
+                metrics.put("measures", measures);
+                metrics.put("filters", filters);
+                metrics.put("mode", mode);
+                metrics.put("preview", preview);
+                metrics.put("previewLimit", 50);
+                metrics.put("outputPath", outputPath);
+                algorithm = "spark-olap-" + mode.toLowerCase(Locale.ROOT);
+            }
             case "SALES_TREND_ANALYSIS" -> {
                 Dataset<Row> result = SalesTrendIntelligence.monthlyTrends(
                         source, "order_id", "order_date", "net_amount");
@@ -534,6 +562,32 @@ public final class SparkAnalyticsJobProcessor implements AnalyticsJobHandler {
 
     private List<String> readStringArray(String arrayJson) throws IOException {
         return json.readValue(arrayJson, new TypeReference<List<String>>() {});
+    }
+
+    private static List<String> stringListAllowEmpty(Map<String, Object> p, String name) {
+        Object value = p.get(name);
+        if (value == null) return List.of();
+        if (!(value instanceof List<?> values) || values.size() > 8
+                || values.stream().anyMatch(item -> !(item instanceof String))) {
+            throw new IllegalArgumentException("Invalid OLAP dimension list: " + name);
+        }
+        return values.stream().map(String.class::cast).distinct().collect(Collectors.toList());
+    }
+
+    private static Map<String, String> stringMapParameter(Map<String, Object> p, String name) {
+        Object value = p.get(name);
+        if (value == null) return Map.of();
+        if (!(value instanceof Map<?, ?> values) || values.size() > 16) {
+            throw new IllegalArgumentException("Invalid map parameter: " + name);
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        values.forEach((key, item) -> {
+            if (!(key instanceof String k) || (item != null && !(item instanceof String))) {
+                throw new IllegalArgumentException("Invalid OLAP filter entry");
+            }
+            result.put(k, (String) item);
+        });
+        return result;
     }
 
     private static List<String> stringList(Map<String, Object> p, String name, List<String> fallback) {
