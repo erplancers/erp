@@ -42,32 +42,12 @@ public final class SparkOlapMining {
         Map<String, String> requestedFilters = filters == null ? Map.of() : new LinkedHashMap<>(filters);
         String resolvedMode = mode == null ? "GROUP" : mode.trim().toUpperCase(Locale.ROOT);
 
-        if (!MODES.contains(resolvedMode)) throw new IllegalArgumentException("mode must be GROUP, ROLLUP, or CUBE");
-        if (groups.size() > MAX_DIMENSIONS) throw new IllegalArgumentException("At most 8 OLAP dimensions are allowed");
-        if (requestedMeasures.size() > MAX_MEASURES) throw new IllegalArgumentException("At most 12 OLAP measures are allowed");
-        if (requestedFilters.size() > MAX_FILTERS) throw new IllegalArgumentException("At most 16 OLAP filters are allowed");
-        if (limit < 1 || limit > MAX_LIMIT) throw new IllegalArgumentException("limit must be between 1 and 1000");
-        if (!"GROUP".equals(resolvedMode) && groups.isEmpty()) {
-            throw new IllegalArgumentException("ROLLUP and CUBE require at least one dimension");
-        }
-
         Set<String> available = Set.copyOf(Arrays.asList(source.columns()));
-        for (String dimension : groups) {
-            requireIdentifier(dimension, "dimension");
-            if (!available.contains(dimension)) throw new IllegalArgumentException("Unknown OLAP dimension: " + dimension);
-        }
-        for (String key : requestedFilters.keySet()) {
-            requireIdentifier(key, "filter");
-            if (!available.contains(key)) throw new IllegalArgumentException("Unknown OLAP filter column: " + key);
-        }
+        validateRequest(groups, requestedMeasures, requestedFilters, resolvedMode, orderBy, limit, available);
 
         List<Column> aggregates = new ArrayList<>();
-        Set<String> outputNames = new HashSet<>(groups);
         for (String measure : requestedMeasures) {
             Measure parsed = parseMeasure(measure, available);
-            if (!outputNames.add(parsed.alias())) {
-                throw new IllegalArgumentException("Duplicate OLAP output column: " + parsed.alias());
-            }
             aggregates.add(parsed.expression().alias(parsed.alias()));
         }
 
@@ -110,6 +90,54 @@ public final class SparkOlapMining {
                     ? functions.col(target).asc() : functions.col(target).desc());
         }
         return result.limit(limit);
+    }
+
+    static void validateRequest(
+            List<String> dimensions,
+            List<String> measures,
+            Map<String, String> filters,
+            String mode,
+            String orderBy,
+            int limit,
+            Set<String> available) {
+        List<String> groups = dimensions == null ? List.of() : dimensions;
+        List<String> requestedMeasures = measures == null || measures.isEmpty() ? List.of("count") : measures;
+        Map<String, String> requestedFilters = filters == null ? Map.of() : filters;
+        String resolvedMode = mode == null ? "GROUP" : mode.trim().toUpperCase(Locale.ROOT);
+        if (!MODES.contains(resolvedMode)) throw new IllegalArgumentException("mode must be GROUP, ROLLUP, or CUBE");
+        if (groups.size() > MAX_DIMENSIONS) throw new IllegalArgumentException("At most 8 OLAP dimensions are allowed");
+        if (requestedMeasures.size() > MAX_MEASURES) throw new IllegalArgumentException("At most 12 OLAP measures are allowed");
+        if (requestedFilters.size() > MAX_FILTERS) throw new IllegalArgumentException("At most 16 OLAP filters are allowed");
+        if (limit < 1 || limit > MAX_LIMIT) throw new IllegalArgumentException("limit must be between 1 and 1000");
+        if (!"GROUP".equals(resolvedMode) && groups.isEmpty()) {
+            throw new IllegalArgumentException("ROLLUP and CUBE require at least one dimension");
+        }
+        for (String dimension : groups) {
+            requireIdentifier(dimension, "dimension");
+            if (!available.contains(dimension)) throw new IllegalArgumentException("Unknown OLAP dimension: " + dimension);
+        }
+        for (String key : requestedFilters.keySet()) {
+            requireIdentifier(key, "filter");
+            if (!available.contains(key)) throw new IllegalArgumentException("Unknown OLAP filter column: " + key);
+        }
+        Set<String> outputNames = new HashSet<>(groups);
+        for (String measure : requestedMeasures) {
+            Measure parsed = parseMeasure(measure, available);
+            if (!outputNames.add(parsed.alias())) {
+                throw new IllegalArgumentException("Duplicate OLAP output column: " + parsed.alias());
+            }
+        }
+        if (orderBy != null && !orderBy.isBlank()) {
+            String[] parts = orderBy.trim().split(":", -1);
+            if (parts.length > 2 || !IDENTIFIER.matcher(parts[0]).matches()
+                    || !outputNames.contains(parts[0])) {
+                throw new IllegalArgumentException("orderBy must reference a selected output column");
+            }
+            String direction = parts.length == 1 ? "desc" : parts[1].toLowerCase(Locale.ROOT);
+            if (!Set.of("asc", "desc").contains(direction)) {
+                throw new IllegalArgumentException("orderBy direction must be asc or desc");
+            }
+        }
     }
 
     private static Measure parseMeasure(String value, Set<String> available) {
