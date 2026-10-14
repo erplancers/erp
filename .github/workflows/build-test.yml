@@ -11,6 +11,7 @@ on:
     branches:
       - main
       - "feature/**"
+      - "feat/**"
       - "chore/**"
   pull_request:
     branches:

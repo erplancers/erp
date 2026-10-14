@@ -32,13 +32,13 @@ public class AnalyticsJobController {
     private static final Set<String> SUPPORTED_JOBS = Set.of(
             "SALES_TREND_ANALYSIS", "RFM", "COHORT_ANALYSIS", "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK",
             "DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY",
-            "MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING");
+            "MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING", "SPARK_OLAP");
     private static final Map<String, DatasetPolicy> DATASETS = Map.of(
             "sales_orders", new DatasetPolicy("CONTACT", Set.of("SALES_TREND_ANALYSIS", "RFM", "COHORT_ANALYSIS",
-                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING")),
-            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING")),
-            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET", "PRODUCT_RECOMMENDATIONS")),
-            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING")));
+                    "CUSTOMER_LIFETIME_VALUE", "CUSTOMER_SEGMENTATION", "CUSTOMER_CHURN_RISK", "DATA_DRIFT", "MODEL_SCORING", "SPARK_OLAP")),
+            "inventory_daily", new DatasetPolicy("WAREHOUSE", Set.of("DEMAND_FORECAST", "STOCKOUT_RISK", "INVENTORY_ANOMALY", "DATA_DRIFT", "MODEL_SCORING", "SPARK_OLAP")),
+            "order_lines", new DatasetPolicy("CONTACT", Set.of("MARKET_BASKET", "PRODUCT_RECOMMENDATIONS", "SPARK_OLAP")),
+            "receivables", new DatasetPolicy("CONTACT", Set.of("RECEIVABLES_RISK", "DATA_DRIFT", "MODEL_SCORING", "SPARK_OLAP")));
     private static final Map<String, Set<String>> PARAMETER_ALLOWLIST = Map.ofEntries(
             Map.entry("SALES_TREND_ANALYSIS", Set.of()),
             Map.entry("RFM", Set.of("asOfDate")),
@@ -53,7 +53,8 @@ public class AnalyticsJobController {
             Map.entry("PRODUCT_RECOMMENDATIONS", Set.of("topN", "rank", "maxIterations", "regularization")),
             Map.entry("RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate")),
             Map.entry("DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate")),
-            Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")));
+            Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")),
+            Map.entry("SPARK_OLAP", Set.of("groupBy", "measures", "filters", "mode", "orderBy", "limit")));
 
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
@@ -197,6 +198,50 @@ public class AnalyticsJobController {
                         || !Double.isFinite(number.doubleValue())
                         || number.doubleValue() < 0.0 || number.doubleValue() > 10.0) {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "regularization must be a finite number in [0,10]");
+                }
+            }
+            if ("groupBy".equals(entry.getKey()) || "measures".equals(entry.getKey())) {
+                int maximum = "groupBy".equals(entry.getKey()) ? 8 : 12;
+                if (!(entry.getValue() instanceof List<?> columns)
+                        || columns.size() > maximum
+                        || ("measures".equals(entry.getKey()) && columns.isEmpty())
+                        || columns.stream().anyMatch(item -> !(item instanceof String))) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, entry.getKey() + " must be a bounded string list");
+                }
+                for (Object item : columns) {
+                    String value = ((String) item).trim();
+                    if ("groupBy".equals(entry.getKey())) {
+                        if (!SAFE_ALIAS.matcher(value).matches()) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsafe OLAP dimension alias");
+                        }
+                    } else if (!value.matches("(?i)count(\\(\\*\\))?|(?:sum|avg|average|min|max|countdistinct|count_distinct|count):[A-Za-z_][A-Za-z0-9_]{0,63}")) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported OLAP measure: " + value);
+                    }
+                }
+            }
+            if ("filters".equals(entry.getKey())) {
+                if (!(entry.getValue() instanceof Map<?, ?> filters) || filters.size() > 16) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "filters must be a map with at most 16 entries");
+                }
+                for (Map.Entry<?, ?> filter : filters.entrySet()) {
+                    if (!(filter.getKey() instanceof String key) || !SAFE_ALIAS.matcher(key).matches()
+                            || (filter.getValue() != null && (!(filter.getValue() instanceof String value) || value.length() > 500))) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid OLAP filter entry");
+                    }
+                }
+            }
+            if ("mode".equals(entry.getKey()) && (!(entry.getValue() instanceof String mode)
+                    || !Set.of("GROUP", "ROLLUP", "CUBE").contains(mode.toUpperCase(Locale.ROOT)))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "mode must be GROUP, ROLLUP, or CUBE");
+            }
+            if ("orderBy".equals(entry.getKey()) && (!(entry.getValue() instanceof String order)
+                    || (!order.isBlank() && !order.matches("[A-Za-z_][A-Za-z0-9_]{0,63}(:asc|:desc)?")))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid OLAP orderBy expression");
+            }
+            if ("limit".equals(entry.getKey())) {
+                if (!(entry.getValue() instanceof Number number) || number.doubleValue() != number.intValue()
+                        || number.intValue() < 1 || number.intValue() > 1000) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OLAP limit must be an integer between 1 and 1000");
                 }
             }
             if (entry.getValue() instanceof String s && s.length() > 500) {
