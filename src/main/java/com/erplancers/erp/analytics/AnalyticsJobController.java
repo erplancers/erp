@@ -53,7 +53,8 @@ public class AnalyticsJobController {
             Map.entry("PRODUCT_RECOMMENDATIONS", Set.of("topN", "rank", "maxIterations", "regularization")),
             Map.entry("RECEIVABLES_RISK", Set.of("featureColumns", "labelColumn", "reviewThreshold", "trainThroughDate")),
             Map.entry("DATA_DRIFT", Set.of("modelName", "modelVersion", "featureColumns", "alertThreshold", "asOfDate")),
-            Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")),\n            Map.entry("SPARK_OLAP", Set.of("groupBy", "measures", "filters", "mode", "orderBy", "limit")));
+            Map.entry("MODEL_SCORING", Set.of("modelName", "modelVersion", "asOfDate", "reviewThreshold")),
+            Map.entry("SPARK_OLAP", Set.of("groupBy", "measures", "filters", "mode", "orderBy", "limit")));
 
     private final JdbcTemplate jdbc;
     private final PolicyAuthorizationService authorization;
