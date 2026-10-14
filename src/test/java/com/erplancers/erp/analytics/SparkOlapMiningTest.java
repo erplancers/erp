@@ -9,6 +9,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
@@ -18,9 +20,11 @@ class SparkOlapMiningTest {
     private static SparkSession spark;
 
     @BeforeAll
-    static void startSpark() {
+    static void startSpark() throws Exception {
+        Path metricsConfig = Files.createTempFile("spark-olap-metrics", ".properties");
         spark = SparkSession.builder().appName("spark-olap-mining-test").master("local[2]")
                 .config("spark.ui.enabled", "false")
+                .config("spark.metrics.conf", metricsConfig.toString())
                 .config("spark.driver.host", "127.0.0.1")
                 .config("spark.sql.shuffle.partitions", "2")
                 .getOrCreate();
