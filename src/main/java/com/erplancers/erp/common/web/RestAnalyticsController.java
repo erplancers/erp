@@ -3,6 +3,7 @@ package com.erplancers.erp.common.web;
 import com.erplancers.erp.common.reporting.AdvancedAnalyticsEngine;
 import com.erplancers.erp.common.reporting.AggregateReportingService;
 import com.erplancers.erp.common.reporting.DashboardReportingService;
+import com.erplancers.erp.common.reporting.DataQualityAnalyticsService;
 import com.erplancers.erp.common.reporting.EntityDataAnalysisService;
 import com.erplancers.erp.common.security.PolicyAuthorizationService;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,6 +27,7 @@ public class RestAnalyticsController {
     private final AdvancedAnalyticsEngine advancedAnalytics;
     private final DashboardReportingService dashboards;
     private final EntityDataAnalysisService analysis;
+    private final DataQualityAnalyticsService dataQuality;
     private final PolicyAuthorizationService authorization;
     private final CrudRegistry registry;
 
@@ -38,6 +40,15 @@ public class RestAnalyticsController {
     public EntityDataAnalysisService.EntityCatalog catalog(Authentication authentication) {
         requireAuthenticated(authentication);
         return analysis.catalog();
+    }
+
+    @GetMapping("/resources/{slug}/quality")
+    public DataQualityAnalyticsService.DataQualityReport quality(
+            Authentication authentication,
+            @PathVariable String slug,
+            @RequestParam(defaultValue = "10") int topValues) {
+        requireRead(authentication, slug);
+        return dataQuality.inspect(slug, topValues);
     }
 
     @GetMapping("/resources/{slug}/profile")
@@ -118,6 +129,7 @@ public class RestAnalyticsController {
                     item.put("name", d.entityType().getSimpleName());
                     item.put("aggregatePath", "/api/analytics/resources/" + d.slug() + "/aggregate");
                     item.put("advancedPath", "/api/analytics/resources/" + d.slug() + "/advanced");
+                    item.put("qualityPath", "/api/analytics/resources/" + d.slug() + "/quality");
                     return item;
                 })
                 .toList();
