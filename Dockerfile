@@ -1,13 +1,18 @@
-FROM eclipse-temurin:21-jdk AS build
+# Build with the same Java version as the project's Java 25 toolchain.
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
+
+# Copy Gradle configuration early so Docker uses the repository's JVM/worker limits.
 COPY gradlew gradlew
 COPY gradle gradle
-COPY build.gradle settings.gradle ./
+COPY gradle.properties build.gradle settings.gradle ./
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon
+
 COPY src src
 RUN ./gradlew bootJar --no-daemon
 
-FROM eclipse-temurin:21-jre
+# Match the runtime to the Java version used to compile the application.
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends wget \
