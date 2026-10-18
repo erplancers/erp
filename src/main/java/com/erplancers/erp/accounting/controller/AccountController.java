@@ -33,9 +33,8 @@ public class AccountController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         List<Account> accounts = accountRepository.findAll(PageRequest.of(page, size)).toList();
-        if (accounts.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
+        // Collection endpoints should return an empty JSON array rather than 204.
+        // TanStack Query requires a defined value even when no accounts exist.
         return ResponseEntity.ok(accounts);
     }
 }
